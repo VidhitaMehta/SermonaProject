@@ -1,0 +1,111 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "description": "Team project workspace containing channels, tasks, and decisions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 500 },
+        "ownerId": { "type": "string", "maxLength": 128 },
+        "members": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "ownerId", "createdAt"]
+    },
+    "Channel": {
+      "title": "Channel",
+      "description": "Discussion channel within a project",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "projectId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 50 },
+        "topic": { "type": "string", "maxLength": 200 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "projectId", "name"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Team conversation message in a channel",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "channelId": { "type": "string", "maxLength": 128 },
+        "projectId": { "type": "string", "maxLength": 128 },
+        "senderId": { "type": "string", "maxLength": 128 },
+        "senderName": { "type": "string", "maxLength": 100 },
+        "senderAvatar": { "type": "string", "maxLength": 256 },
+        "senderRole": { "type": "string", "maxLength": 50 },
+        "content": { "type": "string", "maxLength": 5000 },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "channelId", "projectId", "senderId", "senderName", "content", "timestamp"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Actionable task with status, priority, and assignee",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "projectId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "assigneeId": { "type": "string", "maxLength": 128 },
+        "assigneeName": { "type": "string", "maxLength": 100 },
+        "deadline": { "type": "string", "maxLength": 50 },
+        "priority": { "type": "string", "enum": ["urgent", "high", "medium", "low"] },
+        "status": { "type": "string", "enum": ["backlog", "todo", "in_progress", "review", "completed"] },
+        "source": { "type": "string", "enum": ["manual", "ai_extracted"] },
+        "evidence": { "type": "string", "maxLength": 500 },
+        "confidence": { "type": "number" },
+        "completed": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "projectId", "title", "status", "priority", "completed"]
+    },
+    "Decision": {
+      "title": "Decision",
+      "description": "Architectural or workflow decision detected by AI or logged by team",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "projectId": { "type": "string", "maxLength": 128 },
+        "channelId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "rationale": { "type": "string", "maxLength": 2000 },
+        "status": { "type": "string", "enum": ["confirmed", "proposed", "deprecated"] },
+        "evidence": { "type": "string", "maxLength": 500 },
+        "confidence": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "projectId", "title", "status"]
+    }
+  },
+  "firestore": {
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Team project workspace documents"
+    },
+    "/projects/{projectId}/channels/{channelId}": {
+      "schema": "Channel",
+      "description": "Channels belonging to a project"
+    },
+    "/projects/{projectId}/channels/{channelId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Real-time chat messages within a channel"
+    },
+    "/projects/{projectId}/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Project task items tracked in Kanban and Dashboard"
+    },
+    "/projects/{projectId}/decisions/{decisionId}": {
+      "schema": "Decision",
+      "description": "Decisions logged or extracted by AI"
+    }
+  }
+}
