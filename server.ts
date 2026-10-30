@@ -3,7 +3,13 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
-
+import pool from './db';
+import authRoutes from './routes/auth';
+import projectRoutes from './routes/projects';
+import channelRoutes from './routes/channels';
+import messageRoutes from './routes/messages';
+import workRoutes from './routes/work';
+import requireAuth from './middleware/auth';
 dotenv.config();
 
 const app = express();
@@ -24,7 +30,16 @@ if (apiKey) {
     },
   });
 }
+app.get('/api/db-test', async (req, res) => {
+  try {
+    const r = await pool.query('SELECT NOW() AS time');
+    res.json({ connected: true, time: r.rows[0].time });
+  } catch (e: any) {
+    res.status(500).json({ connected: false, error: e.message });
+  }
 
+});
+app.use('/api/auth', authRoutes);
 // Health & configuration status check
 app.get('/api/status', (req, res) => {
   res.json({
@@ -34,7 +49,11 @@ app.get('/api/status', (req, res) => {
     mode: process.env.NODE_ENV || 'development',
   });
 });
-
+app.use('/api/projects', projectRoutes);
+app.use('/api/projects', projectRoutes);
+app.use('/api', channelRoutes);
+app.use('/api', messageRoutes);
+app.use('/api', workRoutes);
 // Helper validation function for the extracted result
 function validateAndSanitizeAnalysis(
   raw: any,
@@ -225,7 +244,7 @@ function validateAndSanitizeAnalysis(
 }
 
 // AI Conversation Analysis Endpoint
-app.post('/api/analyze-conversation', async (req, res) => {
+app.post('/api/analyze-conversation', requireAuth, async (req, res) => {
   try {
     const {
       projectId,
