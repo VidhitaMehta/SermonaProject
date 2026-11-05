@@ -7,6 +7,7 @@ export const SAMPLE_USERS: User[] = [
     email: 'maya.patel@hackathon.edu',
     avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
     role: 'ML Lead & Researcher',
+    skills: ['Machine Learning', 'Scikit-learn', 'Hyperparameter Tuning', 'Optuna', 'Python', 'Research'],
     initials: 'MP',
   },
   {
@@ -15,6 +16,7 @@ export const SAMPLE_USERS: User[] = [
     email: 'alex.chen@hackathon.edu',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
     role: 'Data Engineer',
+    skills: ['Python', 'Pandas', 'Data Cleaning', 'Parquet', 'SQL', 'Git'],
     initials: 'AC',
   },
   {
@@ -23,6 +25,7 @@ export const SAMPLE_USERS: User[] = [
     email: 'liam.scott@hackathon.edu',
     avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
     role: 'Evaluation & Benchmarks',
+    skills: ['Python', 'SHAP', 'Scikit-learn', 'Model Evaluation', 'Matplotlib', 'Statistics'],
     initials: 'LS',
   },
   {
@@ -31,6 +34,7 @@ export const SAMPLE_USERS: User[] = [
     email: 'sophia.taylor@hackathon.edu',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
     role: 'Product & Demo Lead',
+    skills: ['Figma', 'Presentation Design', 'Public Speaking', 'Live Demo', 'React'],
     initials: 'ST',
   },
 ];
@@ -288,7 +292,7 @@ export const SAMPLE_MESSAGES: Record<string, Message[]> = {
       senderName: 'Maya Patel',
       senderAvatar: SAMPLE_USERS[0].avatar,
       senderRole: 'ML Lead & Researcher',
-      content: "Welcome to CollabAI workspace for the 2026 Capstone Hackathon! Check the channels on the left and test out our AI conversation analysis.",
+      content: "Welcome to Sermona workspace for the 2026 Capstone Hackathon! Check the channels on the left and test out our AI conversation analysis.",
       timestamp: '2026-10-25T10:00:00Z',
     },
   ],

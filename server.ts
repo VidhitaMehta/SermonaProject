@@ -3,11 +3,13 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import dotenv from 'dotenv';
 import { GoogleGenAI, Type } from '@google/genai';
+import { basicExtract } from './server/basicExtract.ts';
 
 dotenv.config();
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
 app.use(express.json({ limit: '10mb' }));
 
@@ -30,7 +32,7 @@ app.get('/api/status', (req, res) => {
   res.json({
     status: 'ok',
     hasGeminiKey: Boolean(apiKey),
-    model: 'gemini-3.8-flash',
+    model: GEMINI_MODEL,
     mode: process.env.NODE_ENV || 'development',
   });
 });
@@ -62,10 +64,6 @@ function validateAndSanitizeAnalysis(
       ? (d.supportingMessageIds || d.sourceMessageIds)
       : [];
     const sourceMessageIds = rawMsgIds.filter((id: string) => validMessageIds.has(String(id)));
-    if (sourceMessageIds.length === 0 && validMessageIds.size > 0) {
-      sourceMessageIds.push(Array.from(validMessageIds)[0]);
-    }
-
     const title = d.title || (d.description ? d.description.slice(0, 80) : 'Project Decision');
     const description = d.description || d.rationale || title;
     const confidence = typeof d.confidence === 'number' ? Math.min(Math.max(d.confidence, 0.1), 0.99) : 0.88;
@@ -126,10 +124,6 @@ function validateAndSanitizeAnalysis(
       ? (t.supportingMessageIds || t.sourceMessageIds)
       : [];
     const sourceMessageIds = rawMsgIds.filter((id: string) => validMessageIds.has(String(id)));
-    if (sourceMessageIds.length === 0 && validMessageIds.size > 0) {
-      sourceMessageIds.push(Array.from(validMessageIds)[0]);
-    }
-
     const missingInformation =
       t.missingInformation && t.missingInformation !== 'null'
         ? String(t.missingInformation)
@@ -218,7 +212,16 @@ function validateAndSanitizeAnalysis(
     proposedTasks,
     tasks: proposedTasks, // compatibility
     unresolvedQuestions,
-    ideas: Array.isArray(raw.ideas) ? raw.ideas : [],
+    ideas: (Array.isArray(raw.ideas) ? raw.ideas : []).map((i: any, idx: number) => ({
+      id: i.id || `idea_${Date.now()}_${idx}`,
+      title: i.title || 'Idea',
+      description: i.description || '',
+      proposedBy: i.proposedBy || undefined,
+      sourceMessageIds: (Array.isArray(i.supportingMessageIds || i.sourceMessageIds)
+        ? i.supportingMessageIds || i.sourceMessageIds
+        : []
+      ).filter((id: string) => validMessageIds.has(String(id))),
+    })),
     insights: Array.isArray(raw.insights) ? raw.insights : [],
     teamInsights,
   };
@@ -275,8 +278,17 @@ app.post('/api/analyze-conversation', async (req, res) => {
       memberNameToId.set('sophia', 'user_sophia');
     }
 
+    const memberDetails = new Map<string, { role?: string; skills?: string[] }>();
+    membersArray.forEach((m: any) => {
+      if (m && m.id) memberDetails.set(String(m.id), { role: m.role, skills: Array.isArray(m.skills) ? m.skills : [] });
+    });
     const membersRosterText = Array.from(validMemberMap.entries())
-      .map(([id, name]) => `• ${name} (ID: "${id}")`)
+      .map(([id, name]) => {
+        const d = memberDetails.get(id);
+        const role = d?.role ? `, role: ${d.role}` : '';
+        const skills = d?.skills && d.skills.length > 0 ? `, skills: ${d.skills.join(', ')}` : '';
+        return `• ${name} (ID: "${id}"${role}${skills})`;
+      })
       .join('\n');
 
     const conversationTranscript = messages
@@ -300,10 +312,13 @@ app.post('/api/analyze-conversation', async (req, res) => {
         existingDecisions.map((d: any) => `• [Decision: "${d.title}"] (Status: ${d.status || 'confirmed'})`).join('\n')
       : 'No prior decisions logged.';
 
+    let fallbackReason =
+      'No GEMINI_API_KEY is set on the server, so these results come from simple keyword rules, not AI.';
+
     // Try Gemini API if available
     if (ai) {
       try {
-        const systemInstruction = `You are CollabAI Intelligence, an authoritative engineering workspace reasoning engine.
+        const systemInstruction = `You are Sermona Intelligence, an authoritative engineering workspace reasoning engine.
 Your purpose is to transform team conversations into validated, structured project intelligence.
 The core workflow is: Talk → Understand → Organize → Validate → Execute.
 
@@ -314,7 +329,9 @@ CRITICAL EXTRACTION RULES:
 4. Supporting Evidence: For every decision, task, and question, you MUST provide supportingMessageIds containing the exact Msg ID strings (e.g. ["msg_102", "msg_104"]) from the transcript as verifiable proof.
 5. De-duplication: Do NOT generate duplicate tasks if the item is already present in Existing Tasks.
 6. Questions vs Commitments: Distinguish explicitly asked questions from inferred gaps. Set category to "explicitly_asked" or "inferred_gap".
-7. Team Insights: Provide cautious, data-grounded observations on workload distribution and collaboration gaps.`;
+7. Team Insights: Provide cautious, data-grounded observations on workload distribution and collaboration gaps.
+8. Skills: For every proposed task, list 1-4 short recommendedSkills needed to do it (e.g. "Python", "Figma", "Data Cleaning"). Prefer the exact skill names used in the member roster when they fit. Do NOT use skills to pick an assignee — assignment rules above still apply.
+9. Ideas: Capture suggestions and brainstormed ideas that are not yet decisions or tasks in "ideas", with who proposed them.`;
 
         const prompt = `Analyze this project conversation from channel #${channelName || 'channel'} in project ${projectId || 'default'}.
 
@@ -331,7 +348,7 @@ ${conversationTranscript}
 Provide structured output conforming strictly to the requested schema.`;
 
         const response = await ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: GEMINI_MODEL,
           contents: prompt,
           config: {
             systemInstruction,
@@ -379,6 +396,7 @@ Provide structured output conforming strictly to the requested schema.`;
                       confidence: { type: Type.NUMBER },
                       missingInformation: { type: Type.STRING },
                       evidenceSnippet: { type: Type.STRING },
+                      recommendedSkills: { type: Type.ARRAY, items: { type: Type.STRING } },
                     },
                     required: ['taskId', 'title', 'description', 'priority', 'status', 'supportingMessageIds', 'confidence', 'evidenceSnippet'],
                   },
@@ -398,6 +416,21 @@ Provide structured output conforming strictly to the requested schema.`;
                       context: { type: Type.STRING },
                     },
                     required: ['id', 'question', 'supportingMessageIds', 'category', 'suggestedNextStep', 'urgency'],
+                  },
+                },
+                ideas: {
+                  type: Type.ARRAY,
+                  description: 'Ideas and suggestions raised that are not yet decisions or tasks.',
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      id: { type: Type.STRING },
+                      title: { type: Type.STRING },
+                      description: { type: Type.STRING },
+                      proposedBy: { type: Type.STRING },
+                      supportingMessageIds: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    },
+                    required: ['id', 'title', 'description', 'supportingMessageIds'],
                   },
                 },
                 teamInsights: {
@@ -429,266 +462,22 @@ Provide structured output conforming strictly to the requested schema.`;
             memberNameToId,
             channelName || 'channel'
           );
-          return res.json(validated);
+          return res.json({ ...validated, mode: 'ai', notice: null });
         }
       } catch (geminiError: any) {
-        console.warn('Gemini 3.8 Flash model unavailable or busy, running resilient contextual extractor:', geminiError.message);
+        console.warn(`Gemini (${GEMINI_MODEL}) unavailable, falling back to basic keyword extraction:`, geminiError.message);
+        fallbackReason = `Gemini request failed (${String(geminiError.message || geminiError).slice(0, 120)}). These results come from simple keyword rules instead.`;
       }
     }
 
-    // Deterministic semantic fallback parser matching the exact required schema
-    const textCorpus = messages.map((m: any) => m.content).join(' ');
-    const isMlProject = channelName?.includes('ml') || textCorpus.includes('Random Forest') || textCorpus.includes('SVM');
-    const isDataset = channelName?.includes('data') || textCorpus.includes('impute') || textCorpus.includes('clean');
-    const isPresentation = channelName?.includes('presentation') || textCorpus.includes('slide') || textCorpus.includes('pitch');
-
-    let fallbackData: any;
-
-    if (isMlProject) {
-      fallbackData = {
-        summary: 'The team benchmarked Random Forest against SVM on the 45,000 clinical records capstone and officially confirmed Random Forest as the primary classification model due to an 18x training speedup, 0.912 ROC-AUC, and direct TreeSHAP feature interpretability.',
-        decisions: [
-          {
-            decisionId: 'dec_ai_rf_selected',
-            title: 'Adopt Random Forest over SVM as primary classification model',
-            description: 'Selected Random Forest over SVM because it achieved 0.912 ROC-AUC with 14.2s training time (vs 4m28s for SVM), natively tolerates skewed tabular vitals, and supports TreeSHAP feature importances for clinical transparency.',
-            status: 'confirmed',
-            supportingMessageIds: messages.filter((m: any) => m.content.includes('Decision confirmed') || m.content.includes('Random Forest')).map((m: any) => m.id),
-            confidence: 0.98,
-            confirmationRequirements: null,
-            evidenceSnippet: 'Decision confirmed: We are going with Random Forest as our primary production model instead of SVM.',
-            confirmedBy: 'Maya Patel (ML Lead)',
-          },
-          {
-            decisionId: 'dec_ai_optuna_sweep',
-            title: 'Explore Optuna hyperparameter sweep for Random Forest bounds',
-            description: 'Proposed exploration on min_samples_split and max_features to verify if 0.92+ ROC-AUC can be reached without overfitting.',
-            status: 'proposed',
-            supportingMessageIds: messages.filter((m: any) => m.content.includes('Optuna')).map((m: any) => m.id),
-            confidence: 0.78,
-            confirmationRequirements: 'Requires team lead approval on hyperparameter search bounds before compute run.',
-            evidenceSnippet: 'are we sticking with Scikit-learn default bootstrap aggregation, or should we run a quick Optuna hyperparameter sweep...',
-          },
-        ],
-        proposedTasks: [
-          {
-            taskId: 'task_ai_shap_export',
-            title: 'Export top 10 TreeSHAP feature importances for demo UI',
-            description: 'Generate JSON bundle containing feature weights and permutation importance rankings for the interactive dashboard.',
-            assigneeId: 'user_liam',
-            suggestedAssignee: 'Liam Scott',
-            deadline: 'Thursday, Oct 29 at 3:00 PM',
-            priority: 'high',
-            status: 'proposed',
-            supportingMessageIds: messages.filter((m: any) => m.content.includes('TreeSHAP') || m.content.includes('Thursday 3 PM')).map((m: any) => m.id),
-            confidence: 0.96,
-            missingInformation: null,
-            evidenceSnippet: 'I will generate both TreeSHAP summary plots and permutation importances and push the JSON bundle by Thursday 3 PM.',
-            recommendedSkills: ['Python', 'SHAP', 'Scikit-learn'],
-          },
-          {
-            taskId: 'task_ai_optuna_bounds',
-            title: 'Define Optuna hyperparameter bounds for Random Forest',
-            description: 'Set parameter boundaries for n_estimators, max_depth, and min_samples_split if sweep is approved.',
-            assigneeId: null,
-            suggestedAssignee: null,
-            deadline: null,
-            priority: 'medium',
-            status: 'proposed',
-            supportingMessageIds: messages.filter((m: any) => m.content.includes('bounds')).map((m: any) => m.id),
-            confidence: 0.82,
-            missingInformation: 'No team member volunteered or was assigned to set Optuna bounds. No target deadline set.',
-            evidenceSnippet: 'We need to agree on our final hyperparameter bounds.',
-            recommendedSkills: ['Hyperparameter Tuning', 'Optuna'],
-          },
-        ],
-        unresolvedQuestions: [
-          {
-            id: 'q_ai_optuna',
-            question: 'Should the team run an Optuna hyperparameter sweep or stick to default bootstrap aggregation?',
-            supportingMessageIds: messages.filter((m: any) => m.content.includes('Optuna')).map((m: any) => m.id),
-            category: 'explicitly_asked',
-            context: 'Maya raised whether tuning min_samples_split and max_features is worth the additional time before presentation freeze.',
-            suggestedNextStep: 'Maya Patel and Liam Scott to review whether 0.912 ROC-AUC is sufficient for judging criteria.',
-            urgency: 'medium',
-          },
-        ],
-        teamInsights: {
-          observations: [
-            'Maya established clear authority in confirming the model selection decision.',
-            'Liam provided empirical benchmark metrics directly supporting the architectural choice.',
-            'Alex ensured preprocessing robustness and clinical interpretability considerations were addressed.',
-          ],
-          workloadDistribution: 'Liam Scott is handling evaluation and SHAP outputs; hyperparameter tuning task remains unassigned.',
-          collaborationGaps: ['Ownership of final hyperparameter bounds needs explicit assignment.'],
-          keyTopics: ['Random Forest vs SVM', 'Training Latency', 'ROC-AUC Benchmarking', 'TreeSHAP Interpretability'],
-          teamAlignment: 'High technical consensus on Random Forest; open discussion on whether to tune further.',
-          sentiment: 'collaborative',
-        },
-      };
-    } else if (isDataset) {
-      fallbackData = {
-        summary: 'Alex implemented MICE iterative imputation on missing clinical vitals (serum creatinine 3.8% and systolic BP 7.1%) and locked down the stratified 80/20 train-test split with random_state=42.',
-        decisions: [
-          {
-            decisionId: 'dec_ai_mice',
-            title: 'Use MICE iterative imputation rather than simple mean imputation',
-            description: 'Preserves feature correlations and clinical variance without introducing central tendency bias on missing vitals.',
-            status: 'confirmed',
-            supportingMessageIds: messages.filter((m: any) => m.content.includes('MICE')).map((m: any) => m.id),
-            confidence: 0.94,
-            confirmationRequirements: null,
-            evidenceSnippet: 'I have created an iterative imputer with MICE rather than simple mean imputation to avoid data distortion.',
-            confirmedBy: 'Alex Chen (Data Engineer)',
-          },
-        ],
-        proposedTasks: [
-          {
-            taskId: 'task_ai_commit_parquet',
-            title: 'Package cleaned parquet files and commit data versioning script',
-            description: 'Commit reproducible data pipeline script with random_state=42 stratified split to repository.',
-            assigneeId: 'user_alex',
-            suggestedAssignee: 'Alex Chen',
-            deadline: 'Wednesday, Oct 28 at 12:00 PM',
-            priority: 'high',
-            status: 'proposed',
-            supportingMessageIds: messages.filter((m: any) => m.content.includes('parquet')).map((m: any) => m.id),
-            confidence: 0.95,
-            missingInformation: null,
-            evidenceSnippet: 'I will package the cleaned parquet files and commit the data versioning script to GitHub by Wednesday noon.',
-            recommendedSkills: ['Pandas', 'Parquet', 'Git'],
-          },
-        ],
-        unresolvedQuestions: [
-          {
-            id: 'q_ai_leakage',
-            question: 'Has target leakage been verified across all 15 engineered clinical interaction terms?',
-            supportingMessageIds: messages.filter((m: any) => m.content.includes('leakage')).map((m: any) => m.id),
-            category: 'explicitly_asked',
-            context: 'Maya asked to verify zero data leakage prior to freezing test split.',
-            suggestedNextStep: 'Alex to run automated scikit-learn pipeline check to confirm transformers are fitted only on train.',
-            urgency: 'high',
-          },
-        ],
-        teamInsights: {
-          observations: ['Data hygiene workflow is methodically documented.'],
-          workloadDistribution: 'Data pipeline responsibilities cleanly owned by Alex Chen.',
-          collaborationGaps: ['Verification of zero leakage requires mutual review with Liam Scott.'],
-          keyTopics: ['Data Imputation', 'MICE', 'Stratified 80/20 Split', 'Target Leakage Prevention'],
-          teamAlignment: 'Strong alignment on rigorous data hygiene.',
-          sentiment: 'aligned',
-        },
-      };
-    } else if (isPresentation) {
-      fallbackData = {
-        summary: 'Sophia confirmed the 10-slide storyline for the 5-minute hackathon pitch on Saturday 10 AM, with timed dry runs scheduled for Friday 4 PM in room 304.',
-        decisions: [
-          {
-            decisionId: 'dec_ai_pitch_schedule',
-            title: 'Lock 10-slide storyline and Friday 4 PM dry run in Room 304',
-            description: 'Ensures all four team members rehearse transitions between problem definition, model architecture, and live risk demo.',
-            status: 'confirmed',
-            supportingMessageIds: messages.filter((m: any) => m.content.includes('Room 304') || m.content.includes('dry run')).map((m: any) => m.id),
-            confidence: 0.96,
-            confirmationRequirements: null,
-            evidenceSnippet: 'We must run a timed dry run on Friday at 4 PM in room 304.',
-            confirmedBy: 'Maya Patel (ML Lead)',
-          },
-        ],
-        proposedTasks: [
-          {
-            taskId: 'task_ai_finalize_slides',
-            title: 'Finalize Figma pitch slide deck and visual assets',
-            description: 'Assemble 10 slides covering clinical challenge, RF vs SVM benchmark, interactive calculator, and guardrails.',
-            assigneeId: 'user_sophia',
-            suggestedAssignee: 'Sophia Taylor',
-            deadline: 'Thursday, Oct 29 at 8:00 PM',
-            priority: 'high',
-            status: 'proposed',
-            supportingMessageIds: messages.filter((m: any) => m.content.includes('Thursday 8 PM')).map((m: any) => m.id),
-            confidence: 0.95,
-            missingInformation: null,
-            evidenceSnippet: 'I will have all slide visual assets ready by Thursday 8 PM.',
-            recommendedSkills: ['Figma', 'Presentation Design'],
-          },
-          {
-            taskId: 'task_ai_demo_speaker',
-            title: 'Designate presenter for live interactive model demo',
-            description: 'Determine which team member will screen-share and walk judges through the clinical risk prediction demo.',
-            assigneeId: null,
-            suggestedAssignee: null,
-            deadline: null,
-            priority: 'medium',
-            status: 'proposed',
-            supportingMessageIds: messages.filter((m: any) => m.content.includes('live demo portion')).map((m: any) => m.id),
-            confidence: 0.85,
-            missingInformation: 'No team member designated yet for live demonstration.',
-            evidenceSnippet: 'Who will do the live demo portion?',
-            recommendedSkills: ['Live Demo', 'Public Speaking'],
-          },
-        ],
-        unresolvedQuestions: [
-          {
-            id: 'q_ai_demo_speaker',
-            question: 'Who will lead the live interactive software demo during the 5-minute pitch?',
-            supportingMessageIds: messages.filter((m: any) => m.content.includes('live demo')).map((m: any) => m.id),
-            category: 'explicitly_asked',
-            context: 'Sophia asked who will do the live demo portion; no assignee has volunteered yet.',
-            suggestedNextStep: 'Maya to assign live demo speaker before Thursday slide freeze.',
-            urgency: 'high',
-          },
-        ],
-        teamInsights: {
-          observations: ['Presentation schedule and slide structure are clearly mapped.'],
-          workloadDistribution: 'Sophia leading visuals; live demo speaker remains unassigned.',
-          collaborationGaps: ['Missing owner for live demo presentation segment.'],
-          keyTopics: ['Pitch Deck', 'Figma Slides', 'Live Demo Script', 'Timed Rehearsal'],
-          teamAlignment: 'Strong shared sense of urgency as hackathon presentation approaches.',
-          sentiment: 'collaborative',
-        },
-      };
-    } else {
-      fallbackData = {
-        summary: `Analyzed ${messages.length} messages in #${channelName || 'channel'}. Conversation reflects active collaboration on deliverables and milestones.`,
-        decisions: [
-          {
-            decisionId: `dec_ai_${Date.now()}`,
-            title: 'Consensus on milestone tracking',
-            description: 'Team aligned on updating tasks and coordinating through active channel threads.',
-            status: 'confirmed',
-            supportingMessageIds: [messages[messages.length - 1]?.id || 'msg_1'],
-            confidence: 0.85,
-            confirmationRequirements: null,
-            evidenceSnippet: messages[messages.length - 1]?.content.slice(0, 100) || 'Active discussion recorded.',
-          },
-        ],
-        proposedTasks: [
-          {
-            taskId: `task_ai_${Date.now()}`,
-            title: `Follow up on items discussed in #${channelName || 'channel'}`,
-            description: 'Review technical notes and verify next development milestones.',
-            assigneeId: null,
-            suggestedAssignee: null,
-            deadline: null,
-            priority: 'medium',
-            status: 'proposed',
-            supportingMessageIds: [messages[0]?.id || 'msg_1'],
-            confidence: 0.8,
-            missingInformation: 'Unassigned task without explicit deadline.',
-            evidenceSnippet: messages[0]?.content.slice(0, 100) || 'Discussion started.',
-          },
-        ],
-        unresolvedQuestions: [],
-        teamInsights: {
-          observations: ['Steady messaging flow throughout channel history.'],
-          workloadDistribution: 'Participation distributed among active team members.',
-          collaborationGaps: [],
-          keyTopics: ['Workspace Sync', 'Project Delivery'],
-          teamAlignment: 'Positive team engagement.',
-          sentiment: 'collaborative',
-        },
-      };
-    }
+    // Honest fallback: a rule-based extractor that actually reads THIS conversation.
+    // The UI labels the result as "Basic mode — not AI".
+    const fallbackData = basicExtract(
+      messages,
+      validMemberMap,
+      channelName || 'channel',
+      Array.isArray(existingTasks) ? existingTasks.map((t: any) => String(t.title || '')) : []
+    );
 
     const validated = validateAndSanitizeAnalysis(
       fallbackData,
@@ -697,7 +486,7 @@ Provide structured output conforming strictly to the requested schema.`;
       memberNameToId,
       channelName || 'channel'
     );
-    return res.json(validated);
+    return res.json({ ...validated, mode: 'basic', notice: fallbackReason });
   } catch (err: any) {
     console.error('Error in /api/analyze-conversation:', err);
     return res.status(500).json({
@@ -722,5 +511,5 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`CollabAI full-stack server running on http://0.0.0.0:${PORT}`);
+  console.log(`Sermona full-stack server running on http://0.0.0.0:${PORT}`);
 });

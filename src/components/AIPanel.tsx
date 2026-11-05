@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Insignia } from './Insignia';
 import { useWorkspace } from '../context/WorkspaceContext';
 import {
   Sparkles,
@@ -24,6 +25,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { SuggestedTask, Priority, DetectedDecision, Question } from '../types';
+import { AssigneeSuggestions } from './AssigneeSuggestions';
 
 export const AIPanel: React.FC = () => {
   const {
@@ -93,12 +95,12 @@ export const AIPanel: React.FC = () => {
         <button
           onClick={() => setIsCollapsed(false)}
           className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors cursor-pointer"
-          title="Expand CollabAI Intelligence Panel"
+          title="Expand Command Centre"
         >
           <Sparkles className="w-5 h-5" />
         </button>
         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest [writing-mode:vertical-rl] rotate-180">
-          CollabAI Intelligence
+          Command Centre
         </span>
       </div>
     );
@@ -114,7 +116,7 @@ export const AIPanel: React.FC = () => {
           </div>
           <div>
             <h3 className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
-              <span>CollabAI Intelligence</span>
+              <span className="uppercase tracking-wider">Command Centre</span>
               <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-emerald-500/20 text-emerald-400">
                 Review Engine
               </span>
@@ -139,11 +141,11 @@ export const AIPanel: React.FC = () => {
         {/* If no analysis exists yet */}
         {!currentAnalysis && !isAnalyzing && (
           <div className="p-6 rounded-2xl bg-slate-900/60 border border-slate-800/80 text-center space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto text-emerald-400">
-              <Sparkles className="w-6 h-6" />
+            <div className="animate-float w-fit mx-auto">
+              <Insignia size={64} active />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-slate-200">Ready to Analyze Conversation</h4>
+              <h4 className="text-xs font-bold text-slate-200">Awaiting orders</h4>
               <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
                 Click "Run Conversation Analysis" to extract confirmed decisions, proposed tasks with evidence IDs, and unresolved questions into this review workspace.
               </p>
@@ -172,6 +174,17 @@ export const AIPanel: React.FC = () => {
         {/* Structured Results Sections */}
         {currentAnalysis && (
           <>
+            {currentAnalysis.mode === 'basic' && (
+              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-200 flex items-start gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <span>
+                  <span className="font-semibold">Basic mode — not AI.</span>{' '}
+                  {currentAnalysis.notice ||
+                    'Results come from simple keyword rules. Add a GEMINI_API_KEY on the server for real AI analysis.'}
+                </span>
+              </div>
+            )}
+
             {/* 1. CONVERSATION SUMMARY */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -183,7 +196,7 @@ export const AIPanel: React.FC = () => {
                   {currentAnalysis.messageCount} msgs
                 </span>
               </div>
-              <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-slate-300 leading-relaxed font-['Plus_Jakarta_Sans'] shadow-sm">
+              <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-slate-300 leading-relaxed font-sans shadow-sm">
                 {currentAnalysis.summary}
               </div>
             </div>
@@ -432,6 +445,18 @@ export const AIPanel: React.FC = () => {
                               </select>
                             </div>
                           </div>
+                          <AssigneeSuggestions
+                            compact
+                            work={{
+                              title: editTaskForm.title,
+                              description: editTaskForm.description,
+                              recommendedSkills: task.recommendedSkills,
+                            }}
+                            currentAssigneeId={editTaskForm.assigneeId}
+                            onPick={(m) =>
+                              setEditTaskForm({ ...editTaskForm, assigneeId: m.id, suggestedAssignee: m.name })
+                            }
+                          />
                           <div>
                             <label className="text-[9px] font-semibold text-slate-400 uppercase">Deadline</label>
                             <input
@@ -480,7 +505,7 @@ export const AIPanel: React.FC = () => {
                           <div className="flex-1 min-w-0">
                             <label
                               htmlFor={`check_${taskId}`}
-                              className="text-xs font-bold text-slate-200 block hover:text-white cursor-pointer leading-snug"
+                              className="text-xs font-bold text-slate-200 block hover:text-emerald-600 cursor-pointer leading-snug"
                             >
                               {task.title}
                             </label>
@@ -525,6 +550,36 @@ export const AIPanel: React.FC = () => {
                                 {task.priority}
                               </span>
                             </div>
+
+                            {/* Skills needed */}
+                            {task.recommendedSkills && task.recommendedSkills.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                                {task.recommendedSkills.map((sk) => (
+                                  <span
+                                    key={sk}
+                                    className="px-1.5 py-0.2 rounded text-[9px] bg-slate-950 border border-slate-800 text-slate-400"
+                                  >
+                                    {sk}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Skill-based assignee suggestions (only when nobody was named in the chat) */}
+                            {!task.assigneeId && (
+                              <AssigneeSuggestions
+                                compact
+                                work={task}
+                                currentAssigneeId={task.assigneeId}
+                                onPick={(m) =>
+                                  editProposedTask(taskId, {
+                                    assigneeId: m.id,
+                                    suggestedAssignee: m.name,
+                                    missingInformation: task.deadline ? null : 'Missing explicit target deadline.',
+                                  })
+                                }
+                              />
+                            )}
 
                             {/* Missing information warning */}
                             {task.missingInformation && (

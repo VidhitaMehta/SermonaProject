@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { Task, Priority, TaskStatus } from '../types';
 import { TaskModal } from './TaskModal';
+import { getDeadlineState, parseDeadline, formatRelative, DeadlineState } from '../lib/deadlines';
 import {
   CheckSquare,
   Clock,
@@ -24,7 +25,7 @@ import {
 } from 'lucide-react';
 
 export const TaskDashboard: React.FC = () => {
-  const { tasks, decisions, teamMembers, toggleTaskComplete, deleteTask, updateTask } = useWorkspace();
+  const { tasks, decisions, teamMembers, project, toggleTaskComplete, deleteTask, updateTask } = useWorkspace();
 
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
@@ -42,6 +43,46 @@ export const TaskDashboard: React.FC = () => {
   const pendingTasks = totalTasks - completedTasks;
   const urgentTasks = tasks.filter((t) => (t.priority === 'urgent' || t.priority === 'high') && !t.completed).length;
   const aiExtractedCount = tasks.filter((t) => t.source === 'ai_extracted').length;
+  const now = new Date();
+  const deadlineStates = new Map<string, DeadlineState>(tasks.map((t) => [t.id, getDeadlineState(t, now)]));
+  const overdueTasks = tasks.filter((t) => deadlineStates.get(t.id) === 'overdue').length;
+  const dueSoonTasks = tasks.filter((t) => deadlineStates.get(t.id) === 'due_soon').length;
+  const completionPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  const projectDeadline = parseDeadline(project.deadline, now);
+  const statusBreakdown: { status: TaskStatus; label: string; color: string }[] = [
+    { status: 'completed', label: 'Done', color: 'bg-signal' },
+    { status: 'review', label: 'Review', color: 'bg-purple-500' },
+    { status: 'in_progress', label: 'In progress', color: 'bg-amber-500' },
+    { status: 'todo', label: 'To do', color: 'bg-blue-500' },
+    { status: 'backlog', label: 'Backlog', color: 'bg-slate-600' },
+  ];
+
+  const deadlineChip = (task: Task) => {
+    const state = deadlineStates.get(task.id) || 'none';
+    if (!task.deadline || state === 'done') return null;
+    const due = parseDeadline(task.deadline, now);
+    const styles: Record<string, string> = {
+      overdue: 'bg-rose-500/15 text-rose-300 border-rose-500/40',
+      due_soon: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
+      on_track: 'bg-slate-950 text-slate-400 border-slate-800',
+      none: 'bg-slate-950 text-slate-500 border-slate-800',
+    };
+    const label =
+      state === 'overdue' && due
+        ? `Overdue · ${formatRelative(due, now)}`
+        : state === 'due_soon' && due
+        ? `Due ${formatRelative(due, now)}`
+        : task.deadline;
+    return (
+      <span
+        className={`px-1.5 py-0.2 rounded text-[9px] font-semibold border flex items-center gap-1 ${styles[state]}`}
+        title={task.deadline}
+      >
+        <Calendar className="w-2.5 h-2.5" />
+        <span className="truncate max-w-[120px]">{label}</span>
+      </span>
+    );
+  };
 
   // Filter tasks
   const filteredTasks = tasks.filter((task) => {
@@ -49,7 +90,9 @@ export const TaskDashboard: React.FC = () => {
       if (filterAssignee === 'unassigned' && task.assigneeName) return false;
       if (filterAssignee !== 'unassigned' && task.assigneeId !== filterAssignee && task.assigneeName !== filterAssignee) return false;
     }
-    if (filterStatus !== 'all' && task.status !== filterStatus) return false;
+    if (filterStatus === 'overdue') {
+      if (deadlineStates.get(task.id) !== 'overdue') return false;
+    } else if (filterStatus !== 'all' && task.status !== filterStatus) return false;
     if (filterPriority !== 'all' && task.priority !== filterPriority) return false;
     if (filterSource !== 'all' && task.source !== filterSource) return false;
     if (searchQuery.trim()) {
@@ -87,7 +130,7 @@ export const TaskDashboard: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2.5">
-              <span>Project Dashboard & Tasks</span>
+              <span className="uppercase tracking-wide">Mission Board</span>
               <span className="px-2 py-0.5 rounded-full text-xs font-mono font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                 {completedTasks}/{totalTasks} Done
               </span>
@@ -119,11 +162,19 @@ export const TaskDashboard: React.FC = () => {
           </div>
 
           <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800">
-            <span className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider block">
-              Pending
+            <span className="text-[10px] font-semibold text-rose-400 uppercase tracking-wider block">
+              Overdue
             </span>
-            <div className="text-xl font-black text-amber-300 mt-1">{pendingTasks}</div>
-            <span className="text-[10px] text-slate-500 mt-0.5 block">Active sprint items</span>
+            <div className={`text-xl font-black mt-1 ${overdueTasks > 0 ? 'text-rose-300' : 'text-slate-500'}`}>
+              {overdueTasks}
+            </div>
+            <button
+              type="button"
+              onClick={() => setFilterStatus(filterStatus === 'overdue' ? 'all' : 'overdue')}
+              className="text-[10px] text-slate-500 hover:text-rose-300 mt-0.5 block cursor-pointer"
+            >
+              {dueSoonTasks} due in 48h · {filterStatus === 'overdue' ? 'show all' : 'filter'}
+            </button>
           </div>
 
           <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800">
@@ -137,11 +188,11 @@ export const TaskDashboard: React.FC = () => {
           </div>
 
           <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800">
-            <span className="text-[10px] font-semibold text-rose-400 uppercase tracking-wider block">
+            <span className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider block">
               Urgent / High
             </span>
-            <div className="text-xl font-black text-rose-300 mt-1">{urgentTasks}</div>
-            <span className="text-[10px] text-slate-500 mt-0.5 block">Priority focus</span>
+            <div className="text-xl font-black text-amber-300 mt-1">{urgentTasks}</div>
+            <span className="text-[10px] text-slate-500 mt-0.5 block">{pendingTasks} open in total</span>
           </div>
 
           <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800">
@@ -154,10 +205,55 @@ export const TaskDashboard: React.FC = () => {
 
           <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800">
             <span className="text-[10px] font-semibold text-purple-400 uppercase tracking-wider block">
-              Sprint Deadline
+              Project Deadline
             </span>
-            <div className="text-xs font-bold text-purple-300 mt-1.5 truncate">Oct 30, 6:00 PM</div>
-            <span className="text-[10px] text-slate-500 mt-0.5 block">Judging rehearsal</span>
+            <div className="text-xs font-bold text-purple-300 mt-1.5 truncate">
+              {projectDeadline
+                ? projectDeadline.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                : 'Not set'}
+            </div>
+            <span
+              className={`text-[10px] mt-0.5 block ${
+                projectDeadline && projectDeadline < now && completionPct < 100 ? 'text-rose-400' : 'text-slate-500'
+              }`}
+            >
+              {projectDeadline ? (projectDeadline < now ? `Passed ${formatRelative(projectDeadline, now)}` : `Due ${formatRelative(projectDeadline, now)}`) : 'Set when creating a project'}
+            </span>
+          </div>
+        </div>
+
+        {/* Overall progress */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="font-semibold text-slate-300">Project progress</span>
+            <span className="font-mono text-slate-400">
+              {completedTasks}/{totalTasks} tasks · {completionPct}%
+            </span>
+          </div>
+          <div className="h-2.5 w-full rounded-full bg-slate-800 overflow-hidden flex">
+            {totalTasks > 0 &&
+              statusBreakdown.map((seg) => {
+                const count = tasks.filter((t) =>
+                  seg.status === 'completed' ? t.completed || t.status === 'completed' : t.status === seg.status && !t.completed
+                ).length;
+                if (count === 0) return null;
+                return (
+                  <div
+                    key={seg.status}
+                    className={`${seg.color} h-full`}
+                    style={{ width: `${(count / totalTasks) * 100}%` }}
+                    title={`${seg.label}: ${count}`}
+                  />
+                );
+              })}
+          </div>
+          <div className="flex flex-wrap gap-3 text-[10px] text-slate-500">
+            {statusBreakdown.map((seg) => (
+              <span key={seg.status} className="flex items-center gap-1">
+                <span className={`w-2 h-2 rounded-full ${seg.color}`} />
+                {seg.label}
+              </span>
+            ))}
           </div>
         </div>
 
@@ -203,6 +299,7 @@ export const TaskDashboard: React.FC = () => {
               <option value="in_progress">In Progress</option>
               <option value="review">Review</option>
               <option value="completed">Completed</option>
+              <option value="overdue">⚠ Overdue</option>
             </select>
 
             {/* Priority Filter */}
@@ -289,9 +386,9 @@ export const TaskDashboard: React.FC = () => {
                       colTasks.map((task) => (
                         <div
                           key={task.id}
-                          className={`p-3 rounded-xl border bg-slate-900/90 transition-all hover:border-slate-700 shadow-sm space-y-2.5 ${
+                          className={`lift animate-pop-in p-3 rounded-xl border border-slate-800 bg-slate-900/90 shadow-sm space-y-2.5 ${
                             task.completed ? 'opacity-60 bg-slate-950/80' : ''
-                          }`}
+                          } ${deadlineStates.get(task.id) === 'overdue' ? 'border-rose-500/50' : ''}`}
                         >
                           <div className="flex items-start gap-2">
                             <input
@@ -330,6 +427,8 @@ export const TaskDashboard: React.FC = () => {
                             >
                               {task.priority}
                             </span>
+
+                            {deadlineChip(task)}
 
                             {task.source === 'ai_extracted' && (
                               <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
@@ -469,7 +568,7 @@ export const TaskDashboard: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-3 px-3 text-[11px] text-slate-400">
-                        {task.deadline || 'No deadline'}
+                        {task.deadline ? deadlineChip(task) || task.deadline : 'No deadline'}
                       </td>
                       <td className="py-3 px-3">
                         <span

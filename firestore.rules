@@ -7,8 +7,12 @@ service cloud.firestore {
     }
 
     // Helper functions
+    // Only verified accounts from the allowed email domain(s) can use the app.
+    // Keep this list in sync with ALLOWED_EMAIL_DOMAINS in src/lib/firebase.ts
     function isSignedIn() {
-      return request.auth != null;
+      return request.auth != null &&
+             request.auth.token.email_verified == true &&
+             request.auth.token.email.matches('.*@thapar[.]edu$');
     }
 
     function isValidId(id) {
@@ -51,7 +55,31 @@ service cloud.firestore {
              data.projectId is string && isValidId(data.projectId) &&
              data.senderId is string && data.senderId == request.auth.uid &&
              data.senderName is string && data.senderName.size() <= 100 &&
-             data.content is string && data.content.size() > 0 && data.content.size() <= 5000;
+             data.content is string && data.content.size() <= 5000 &&
+             (data.content.size() > 0 || data.keys().hasAny(['codeSnippet']));
+    }
+
+    // Any project member may toggle reactions on any message, but change nothing else
+    function isReactionOnlyUpdate() {
+      return incoming().diff(existing()).affectedKeys().hasOnly(['reactions']) &&
+             incoming().reactions is map;
+    }
+
+    // A signed-in user who knows the project id (shared via invite link) may add
+    // exactly themselves to `members` - and change nothing else.
+    function isSelfJoin() {
+      return !(request.auth.uid in existing().members) &&
+             incoming().diff(existing()).affectedKeys().hasOnly(['members']) &&
+             incoming().members.size() == existing().members.size() + 1 &&
+             incoming().members.hasAll(existing().members) &&
+             request.auth.uid in incoming().members;
+    }
+
+    function isValidMember(memberId, data) {
+      return data.id == memberId &&
+             data.name is string && data.name.size() <= 100 &&
+             (!data.keys().hasAny(['skills']) || (data.skills is list && data.skills.size() <= 30)) &&
+             (!data.keys().hasAny(['role']) || (data.role is string && data.role.size() <= 80));
     }
 
     function isValidTask(data) {
@@ -67,7 +95,7 @@ service cloud.firestore {
       return data.id is string && isValidId(data.id) &&
              data.projectId is string && isValidId(data.projectId) &&
              data.title is string && data.title.size() > 0 && data.title.size() <= 200 &&
-             data.status in ['confirmed', 'proposed', 'deprecated'];
+             data.status in ['confirmed', 'proposed', 'superseded', 'deprecated'];
     }
 
     // Projects collection
@@ -77,6 +105,7 @@ service cloud.firestore {
       allow create: if isSignedIn() && isValidId(projectId) && isValidProject(incoming());
       allow update: if isSignedIn() && isValidId(projectId) && isProjectOwner(projectId) &&
                    incoming().ownerId == existing().ownerId;
+      allow update: if isSignedIn() && isValidId(projectId) && isSelfJoin();
       allow delete: if isSignedIn() && isValidId(projectId) && isProjectOwner(projectId);
 
       // Channels subcollection
@@ -93,6 +122,7 @@ service cloud.firestore {
                        existing().senderId == request.auth.uid &&
                        incoming().senderId == existing().senderId &&
                        isValidMessage(incoming());
+          allow update: if isProjectMember(projectId) && isReactionOnlyUpdate();
           allow delete: if isProjectMember(projectId) && (existing().senderId == request.auth.uid || isProjectOwner(projectId));
         }
       }
@@ -104,6 +134,20 @@ service cloud.firestore {
         allow update: if isProjectMember(projectId) && isValidId(taskId) && isValidTask(incoming()) &&
                      incoming().projectId == existing().projectId;
         allow delete: if isProjectMember(projectId) && isValidId(taskId);
+      }
+
+      // Member profiles (name, role, skills, presence) - you can only edit your own
+      match /members/{memberId} {
+        allow get, list: if isProjectMember(projectId);
+        allow create, update: if isProjectMember(projectId) && request.auth.uid == memberId &&
+                             isValidMember(memberId, incoming());
+        allow delete: if request.auth.uid == memberId || isProjectOwner(projectId);
+      }
+
+      // Saved AI analysis per channel (summary, proposed tasks, open questions) shared with the team
+      match /analyses/{channelId} {
+        allow get, list: if isProjectMember(projectId);
+        allow create, update, delete: if isProjectMember(projectId) && isValidId(channelId);
       }
 
       // Decisions subcollection

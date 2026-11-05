@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Portal } from './Portal';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { Database, ShieldCheck, AlertCircle, ExternalLink, X, CheckCircle, Info } from 'lucide-react';
 
@@ -52,7 +53,8 @@ export const FirebaseSetupBanner: React.FC = () => {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+        <Portal>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1b1640]/30 backdrop-blur-md animate-fade-up">
           <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
             <button
               onClick={() => setShowModal(false)}
@@ -67,7 +69,7 @@ export const FirebaseSetupBanner: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-100">Persistence & Authentication Status</h3>
-                <p className="text-xs text-slate-400">CollabAI data storage architecture</p>
+                <p className="text-xs text-slate-400">Sermona data storage architecture</p>
               </div>
             </div>
 
@@ -99,7 +101,7 @@ export const FirebaseSetupBanner: React.FC = () => {
                     <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                     <div>
                       <span className="font-semibold block">Notice on Database Persistence</span>
-                      CollabAI is transparently operating in Local Hackathon Mode. All new messages, AI analyses, manual tasks, and decisions are preserved in your browser session.
+                      Sermona is transparently operating in Local Hackathon Mode. All new messages, AI analyses, manual tasks, and decisions are preserved in your browser session.
                     </div>
                   </div>
                   <p className="text-xs text-slate-400 pl-6">
@@ -139,6 +141,7 @@ export const FirebaseSetupBanner: React.FC = () => {
             </div>
           </div>
         </div>
+        </Portal>
       )}
     </>
   );

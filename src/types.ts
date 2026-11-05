@@ -12,6 +12,7 @@ export interface User {
   role: string;
   skills?: string[];
   online?: boolean;
+  lastSeen?: string;
   initials: string;
 }
 
@@ -35,6 +36,7 @@ export interface Channel {
   members?: string[];
   projectId?: string;
   unreadCount?: number;
+  createdAt?: string;
 }
 
 export interface Message {
@@ -171,6 +173,10 @@ export interface TeamInsights {
 }
 
 export interface AIAnalysisResult {
+  /** 'ai' = Gemini produced this; 'basic' = keyword-based fallback (no API key or Gemini failed) */
+  mode?: 'ai' | 'basic';
+  notice?: string | null;
+  channelId?: string;
   summary: string;
   channelName: string;
   analyzedAt: string;

@@ -1,6 +1,6 @@
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import { getAuth, Auth } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import { getAuth, Auth, GoogleAuthProvider } from 'firebase/auth';
+import { initializeFirestore, getFirestore, Firestore } from 'firebase/firestore';
 
 export interface FirebaseStatus {
   isConfigured: boolean;
@@ -16,6 +16,17 @@ let configStatus: FirebaseStatus = {
   projectId: null,
 };
 
+const googleProvider = new GoogleAuthProvider();
+
+// Sirf in domains ke emails app use kar sakte hain (firestore.rules mein bhi same list honi chahiye)
+export const ALLOWED_EMAIL_DOMAINS = ['thapar.edu'];
+
+// Google login screen pe sirf isi domain ke accounts dikhaye (sirf suvidha ke liye, asli rok rules mein hai)
+googleProvider.setCustomParameters({ hd: ALLOWED_EMAIL_DOMAINS[0] });
+
+export const isAllowedEmail = (email?: string | null) =>
+  !!email && ALLOWED_EMAIL_DOMAINS.some((d) => email.toLowerCase().endsWith('@' + d));
+
 // Use Vite's safe glob loader so missing optional config file doesn't fail bundler build
 try {
   const configs = import.meta.glob<{ default: any }>('/firebase-applet-config.json', { eager: true });
@@ -23,13 +34,17 @@ try {
 
   if (configModule && configModule.default && configModule.default.projectId && configModule.default.projectId !== 'remixed-project-id') {
     const config = configModule.default;
-    if (!getApps().length) {
-      app = initializeApp(config);
-    } else {
-      app = getApps()[0];
-    }
+    const isFirstInit = !getApps().length;
+    app = isFirstInit ? initializeApp(config) : getApps()[0];
     auth = getAuth(app);
-    db = getFirestore(app, config.firestoreDatabaseId);
+    // Firestore rejects `undefined` field values by default, which silently broke
+    // syncing of optional fields (e.g. messages without a code snippet).
+    try {
+      db = initializeFirestore(app, { ignoreUndefinedProperties: true }, config.firestoreDatabaseId);
+    } catch {
+      // Already initialized (e.g. during Vite hot reload)
+      db = getFirestore(app, config.firestoreDatabaseId);
+    }
     configStatus = {
       isConfigured: true,
       projectId: config.projectId,
@@ -43,4 +58,4 @@ try {
   };
 }
 
-export { app, auth, db, configStatus };
+export { app, auth, db, configStatus, googleProvider };

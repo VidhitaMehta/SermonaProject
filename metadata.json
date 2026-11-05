@@ -1,5 +1,5 @@
 {
-  "name": "CollabAI",
+  "name": "Sermona",
   "description": "AI-powered collaborative workspace that transforms team conversations into structured, actionable work with Gemini.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

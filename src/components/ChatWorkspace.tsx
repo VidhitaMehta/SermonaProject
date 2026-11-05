@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Portal } from './Portal';
 import { useWorkspace } from '../context/WorkspaceContext';
 import {
   Sparkles,
@@ -17,6 +18,7 @@ import {
   TrendingUp,
   X,
   Loader2,
+  Trash2,
 } from 'lucide-react';
 
 export const ChatWorkspace: React.FC = () => {
@@ -31,6 +33,8 @@ export const ChatWorkspace: React.FC = () => {
     searchQuery,
     setSearchQuery,
     project,
+    deleteMessage,
+    canDeleteMessage,
   } = useWorkspace();
 
   const [inputContent, setInputContent] = useState('');
@@ -201,7 +205,7 @@ export const ChatWorkspace: React.FC = () => {
             return (
               <div
                 key={msg.id}
-                className={`group flex items-start gap-3.5 p-2 rounded-2xl transition-colors relative hover:bg-slate-850/60 ${
+                className={`group animate-pop-in flex items-start gap-3.5 p-2 rounded-2xl transition-colors relative hover:bg-slate-850 ${
                   isDecisionMention ? 'bg-emerald-500/5 border border-emerald-500/20' : ''
                 }`}
               >
@@ -232,7 +236,7 @@ export const ChatWorkspace: React.FC = () => {
                   </div>
 
                   {/* Text Content */}
-                  <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-line font-['Plus_Jakarta_Sans'] break-words">
+                  <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-line font-sans break-words">
                     {msg.content}
                   </div>
 
@@ -288,6 +292,17 @@ export const ChatWorkspace: React.FC = () => {
                   >
                     <Smile className="w-3.5 h-3.5" />
                   </button>
+                  {canDeleteMessage(msg) && (
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Delete this message? This cannot be undone.')) deleteMessage(msg.id);
+                      }}
+                      className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-rose-950 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
+                      title="Delete message"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
 
                 {/* Reaction Picker Dropdown */}
@@ -345,7 +360,7 @@ export const ChatWorkspace: React.FC = () => {
                 }
               }}
               placeholder={`Message #${channel?.name || 'channel'} (Press Enter to send, Shift+Enter for newline)...`}
-              className="w-full bg-transparent text-xs text-slate-200 placeholder-slate-500 focus:outline-none resize-none leading-relaxed font-['Plus_Jakarta_Sans']"
+              className="w-full bg-transparent text-xs text-slate-200 placeholder-slate-500 focus:outline-none resize-none leading-relaxed font-sans"
             />
 
             <div className="flex items-center justify-between pt-1 border-t border-slate-800/60 mt-1">
@@ -380,7 +395,8 @@ export const ChatWorkspace: React.FC = () => {
 
       {/* Code Snippet Modal */}
       {showCodeSnippetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+        <Portal>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1b1640]/30 backdrop-blur-md animate-fade-up">
           <div className="bg-slate-900 border border-slate-750 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
             <button
               onClick={() => setShowCodeSnippetModal(false)}
@@ -441,6 +457,7 @@ export const ChatWorkspace: React.FC = () => {
             </form>
           </div>
         </div>
+        </Portal>
       )}
     </div>
   );

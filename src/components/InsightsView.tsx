@@ -60,7 +60,7 @@ export const InsightsView: React.FC = () => {
       <div className="p-6 border-b border-slate-800 bg-slate-950/50 flex-shrink-0">
         <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2.5">
           <BrainCircuit className="w-5 h-5 text-emerald-400" />
-          <span>CollabAI Workspace Intelligence & Analytics</span>
+          <span className="uppercase tracking-wide">Intel &amp; Analytics</span>
         </h1>
         <p className="text-xs text-slate-400 mt-1">
           Deep-dive telemetry on conversation-to-execution conversion, team alignment, and AI extraction accuracy.

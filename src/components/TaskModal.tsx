@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
+import { Portal } from './Portal';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { Task, Priority, TaskStatus } from '../types';
 import { X, CheckSquare, Calendar, User as UserIcon, Tag, AlertCircle } from 'lucide-react';
+import { AssigneeSuggestions } from './AssigneeSuggestions';
+import { parseDeadline } from '../lib/deadlines';
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -19,6 +22,28 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, taskToEdi
   const [priority, setPriority] = useState<Priority>(taskToEdit ? taskToEdit.priority : 'medium');
   const [status, setStatus] = useState<TaskStatus>(taskToEdit ? taskToEdit.status : 'todo');
   const [tagInput, setTagInput] = useState(taskToEdit && taskToEdit.tags ? taskToEdit.tags.join(', ') : 'Engineering');
+  const [skillsInput, setSkillsInput] = useState(
+    taskToEdit && taskToEdit.recommendedSkills ? taskToEdit.recommendedSkills.join(', ') : ''
+  );
+
+  // The modal stays mounted between opens, so re-sync the form whenever it opens for a different task
+  React.useEffect(() => {
+    if (!isOpen) return;
+    setTitle(taskToEdit ? taskToEdit.title : '');
+    setDescription(taskToEdit ? taskToEdit.description : '');
+    setAssigneeId(taskToEdit ? taskToEdit.assigneeId || '' : '');
+    setDeadline(taskToEdit ? taskToEdit.deadline || '' : '');
+    setPriority(taskToEdit ? taskToEdit.priority : 'medium');
+    setStatus(taskToEdit ? taskToEdit.status : 'todo');
+    setTagInput(taskToEdit && taskToEdit.tags ? taskToEdit.tags.join(', ') : 'Engineering');
+    setSkillsInput(taskToEdit && taskToEdit.recommendedSkills ? taskToEdit.recommendedSkills.join(', ') : '');
+  }, [isOpen, taskToEdit]);
+
+  const recommendedSkills = skillsInput
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean);
+  const parsedDeadline = parseDeadline(deadline);
 
   if (!isOpen) return null;
 
@@ -43,6 +68,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, taskToEdi
         priority,
         status,
         tags,
+        recommendedSkills,
       });
     } else {
       createTask({
@@ -55,6 +81,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, taskToEdi
         priority,
         status,
         tags,
+        recommendedSkills,
       });
     }
 
@@ -62,7 +89,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, taskToEdi
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+    <Portal>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1b1640]/30 backdrop-blur-md animate-fade-up">
       <div className="bg-slate-900 border border-slate-750 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
         <button
           onClick={onClose}
@@ -138,6 +166,24 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, taskToEdi
             </div>
           </div>
 
+          <div>
+            <label className="text-xs font-semibold text-slate-300 block mb-1">
+              Skills needed (comma separated)
+            </label>
+            <input
+              type="text"
+              value={skillsInput}
+              onChange={(e) => setSkillsInput(e.target.value)}
+              placeholder="e.g. Python, SHAP, Figma"
+              className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-750 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+            />
+            <AssigneeSuggestions
+              work={{ title, description, recommendedSkills }}
+              currentAssigneeId={assigneeId}
+              onPick={(m) => setAssigneeId(m.id)}
+            />
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-slate-300 block mb-1">Deadline</label>
@@ -145,9 +191,16 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, taskToEdi
                 type="text"
                 value={deadline}
                 onChange={(e) => setDeadline(e.target.value)}
-                placeholder="e.g. Friday, Oct 30 at 4:00 PM"
+                placeholder="e.g. Nov 6 at 4:00 PM"
                 className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-750 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
               />
+              {deadline.trim() && (
+                <p className={`text-[10px] mt-1 ${parsedDeadline ? 'text-slate-500' : 'text-amber-400'}`}>
+                  {parsedDeadline
+                    ? `Due ${parsedDeadline.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+                    : "Couldn't read this as a date, so it won't be tracked for overdue."}
+                </p>
+              )}
             </div>
 
             <div>
@@ -197,5 +250,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, taskToEdi
         </form>
       </div>
     </div>
+    </Portal>
   );
 };

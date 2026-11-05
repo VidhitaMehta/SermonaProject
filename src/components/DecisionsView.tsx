@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Portal } from './Portal';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { Decision, DecisionStatus } from '../types';
 import {
@@ -151,7 +152,7 @@ export const DecisionsView: React.FC = () => {
                   </div>
                 </div>
 
-                <p className="text-xs text-slate-300 leading-relaxed font-['Plus_Jakarta_Sans']">
+                <p className="text-xs text-slate-300 leading-relaxed font-sans">
                   {dec.description || dec.rationale}
                 </p>
 
@@ -197,7 +198,8 @@ export const DecisionsView: React.FC = () => {
 
       {/* Record Decision Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+        <Portal>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1b1640]/30 backdrop-blur-md animate-fade-up">
           <div className="bg-slate-900 border border-slate-750 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
             <button
               onClick={() => setIsModalOpen(false)}
@@ -282,6 +284,7 @@ export const DecisionsView: React.FC = () => {
             </form>
           </div>
         </div>
+        </Portal>
       )}
     </div>
   );
