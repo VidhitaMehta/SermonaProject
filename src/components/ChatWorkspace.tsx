@@ -35,6 +35,8 @@ export const ChatWorkspace: React.FC = () => {
     project,
     deleteMessage,
     canDeleteMessage,
+    highlightedMessageId, 
+    setHighlightedMessageId
   } = useWorkspace();
 
   const [inputContent, setInputContent] = useState('');
@@ -51,6 +53,19 @@ export const ChatWorkspace: React.FC = () => {
   const filteredMessages = currentMessages.filter((m) => {
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
+      useEffect(() => {
+    if (!highlightedMessageId) return;
+    const scrollTimer = setTimeout(() => {
+      document
+        .getElementById(`msg-${highlightedMessageId}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+    const clearTimer = setTimeout(() => setHighlightedMessageId(null), 3000);
+    return () => {
+      clearTimeout(scrollTimer);
+      clearTimeout(clearTimer);
+    };
+  }, [highlightedMessageId, activeChannelId]);
     return (
       m.content.toLowerCase().includes(query) ||
       m.senderName.toLowerCase().includes(query) ||
@@ -206,8 +221,10 @@ export const ChatWorkspace: React.FC = () => {
               <div
                 key={msg.id}
                 id={`msg-${msg.id}`}
-                className={`group animate-pop-in flex items-start gap-3.5 p-2 rounded-2xl transition-colors relative hover:bg-slate-850 ${
+                 className={`group animate-pop-in flex items-start gap-3.5 p-2 rounded-2xl transition-colors relative hover:bg-slate-850 ${
                   isDecisionMention ? 'bg-emerald-500/5 border border-emerald-500/20' : ''
+                } ${
+                  highlightedMessageId === msg.id ? 'ring-2 ring-emerald-400 bg-emerald-500/10' : ''
                 }`}
               >
                 {/* Sender Avatar */}

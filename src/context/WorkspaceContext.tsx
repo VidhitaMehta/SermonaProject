@@ -95,7 +95,8 @@ interface WorkspaceContextType {
   decisions: Decision[];
   activeTab: ViewTab;
   setActiveTab: (tab: ViewTab) => void;
-   highlightedMessageId: string | null;
+  highlightedMessageId: string | null;
+  setHighlightedMessageId: (id: string | null) => void;
   jumpToMessage: (messageId: string, channelId?: string) => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
@@ -1389,6 +1390,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         activeTab,
         setActiveTab,
         highlightedMessageId,
+        setHighlightedMessageId,
         jumpToMessage,
         searchQuery,
         setSearchQuery,
