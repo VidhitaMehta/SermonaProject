@@ -40,6 +40,7 @@ export const AIPanel: React.FC = () => {
     confirmDecision,
     editDecision,
     supersedeDecision,
+    jumpToMessage,
     assignQuestionOwner,
     resolveQuestion,
     keepQuestionOpen,
@@ -597,15 +598,20 @@ export const AIPanel: React.FC = () => {
                               </div>
                             )}
 
-                            {/* Source Message IDs */}
+                           {/* Source Message IDs */}
                             {task.sourceMessageIds && task.sourceMessageIds.length > 0 && (
                               <div className="flex items-center gap-1 mt-1.5 text-[9px] text-slate-500">
                                 <Tag className="w-2.5 h-2.5" />
                                 <span>Evidence IDs:</span>
                                 {task.sourceMessageIds.map((id) => (
-                                  <span key={id} className="font-mono text-emerald-400/80 bg-slate-950 px-1 py-0.2 rounded border border-slate-850">
+                                  <button
+                                    key={id}
+                                    onClick={() => jumpToMessage(id)}
+                                    className="font-mono text-emerald-400/80 bg-slate-950 px-1 py-0.2 rounded border border-slate-850 hover:border-emerald-400 cursor-pointer"
+                                    title="Jump to this message"
+                                  >
                                     {id}
-                                  </span>
+                                  </button>
                                 ))}
                               </div>
                             )}
