@@ -95,6 +95,8 @@ interface WorkspaceContextType {
   decisions: Decision[];
   activeTab: ViewTab;
   setActiveTab: (tab: ViewTab) => void;
+   highlightedMessageId: string | null;
+  jumpToMessage: (messageId: string, channelId?: string) => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   currentAnalysis: AIAnalysisResult | null;
@@ -270,6 +272,18 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   /** AI analysis results are stored per channel, so switching channels shows that channel's review. */
   const [analyses, setAnalyses] = useState<Record<string, AIAnalysisResult>>(initialStored?.analyses || {});
   const [activeTab, setActiveTab] = useState<ViewTab>('dashboard');
+    const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+
+  const jumpToMessage = (messageId: string, channelId?: string) => {
+    const targetChannel =
+      channelId ||
+      Object.keys(messages).find((ch) => (messages[ch] || []).some((m) => m.id === messageId));
+    if (!targetChannel) return; // message deleted or not found: do nothing
+    setSearchQuery(''); // an active search could hide the message
+    setActiveChannelId(targetChannel);
+    setActiveTab('channels');
+    setHighlightedMessageId(messageId);
+  };
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -1374,6 +1388,8 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         decisions,
         activeTab,
         setActiveTab,
+        highlightedMessageId,
+        jumpToMessage,
         searchQuery,
         setSearchQuery,
         currentAnalysis,
