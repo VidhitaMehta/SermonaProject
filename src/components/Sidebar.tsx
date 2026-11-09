@@ -3,7 +3,7 @@ import { Portal } from './Portal';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { Plus, LayoutGrid, Crosshair, FileCheck2, Radar, Users, RotateCcw, X, UserPlus, Trash2, ChevronRight } from 'lucide-react';
 import { ViewTab } from '../types';
-
+import ChannelFlashcard from './ChannelFlashCard';
 /** Little 4-bar "signal strength" indicator used for online status. */
 const SignalBars: React.FC<{ online: boolean }> = ({ online }) => (
   <span className="flex items-end gap-[2px] h-3" title={online ? 'Online' : 'Offline'}>
@@ -139,6 +139,9 @@ export const Sidebar: React.FC = () => {
               const canDelete = isProjectOwner && channels.length > 1;
               return (
                 <div key={chan.id} className="relative group/chan">
+               <div className="hidden group-hover/chan:block absolute left-full top-0 z-50 pl-2">
+               <ChannelFlashcard channel={chan} />
+               </div>
                   <button
                     onClick={() => {
                       setActiveChannelId(chan.id);
