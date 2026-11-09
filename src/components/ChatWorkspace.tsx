@@ -1,7 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Portal } from './Portal';
+import { ChannelThemePicker } from './ChannelThemePicker';
+import { CHARACTERS, getChannelIdentity } from '../data/channelIdentities';
+import { getChannelTheme } from '../data/channelThemes';
 import { useWorkspace } from '../context/WorkspaceContext';
 import {
+  Settings2,
   Sparkles,
   Search,
   Send,
@@ -35,11 +39,21 @@ export const ChatWorkspace: React.FC = () => {
     project,
     deleteMessage,
     canDeleteMessage,
-    highlightedMessageId, 
-    setHighlightedMessageId
+    highlightedMessageId,
+    setHighlightedMessageId,
+    getChannelAdminId,
+    setChannelAdmin,
+    isProjectOwner,
+    teamMembers,
+    setMyChannelCharacter,
+    currentUser,
+    mode,
   } = useWorkspace();
 
   const [inputContent, setInputContent] = useState('');
+  const [savingCharacter, setSavingCharacter] = useState(false);
+  const [savingAdmin, setSavingAdmin] = useState(false);
+  const settingsDialog = useRef<HTMLDialogElement>(null);
   const [showCodeSnippetModal, setShowCodeSnippetModal] = useState(false);
   const [snippetLanguage, setSnippetLanguage] = useState('python');
   const [snippetCode, setSnippetCode] = useState('');
@@ -47,17 +61,38 @@ export const ChatWorkspace: React.FC = () => {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const channel = channels.find((c) => c.id === activeChannelId);
+  const theme = getChannelTheme(channel?.theme);
+  const characterChoices = new Map(teamMembers.map((member) => [member.id, member.channelCharacters]));
+  const identityFor = (memberId: string) =>
+    getChannelIdentity(theme?.id, memberId, theme ? characterChoices.get(memberId)?.[theme.id] : undefined);
+  const myIdentity = identityFor(currentUser.id);
+  const adminId = channel ? getChannelAdminId(channel) : '';
+  const canChangeTheme = Boolean(channel && adminId === currentUser.id);
+  const adminName = teamMembers.find((member) => member.id === adminId)?.name ?? 'Workspace owner';
   const currentMessages = messages[activeChannelId] || [];
 
   // Filter messages based on search query
   const filteredMessages = currentMessages.filter((m) => {
     if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase();
-      useEffect(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const identity = identityFor(m.senderId);
+    return (
+      m.content.toLowerCase().includes(query) ||
+      m.senderName.toLowerCase().includes(query) ||
+      m.senderRole.toLowerCase().includes(query) ||
+      identity?.username.includes(query) ||
+      identity?.name.toLowerCase().includes(query)
+    );
+  });
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [currentMessages.length, activeChannelId]);
+
+  useEffect(() => {
     if (!highlightedMessageId) return;
     const scrollTimer = setTimeout(() => {
-      document
-        .getElementById(`msg-${highlightedMessageId}`)
+      document.getElementById(`msg-${highlightedMessageId}`)
         ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 150);
     const clearTimer = setTimeout(() => setHighlightedMessageId(null), 3000);
@@ -65,17 +100,7 @@ export const ChatWorkspace: React.FC = () => {
       clearTimeout(scrollTimer);
       clearTimeout(clearTimer);
     };
-  }, [highlightedMessageId, activeChannelId]);
-    return (
-      m.content.toLowerCase().includes(query) ||
-      m.senderName.toLowerCase().includes(query) ||
-      m.senderRole.toLowerCase().includes(query)
-    );
-  });
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [currentMessages.length, activeChannelId]);
+  }, [highlightedMessageId, activeChannelId, setHighlightedMessageId]);
 
   const handleSend = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -114,9 +139,9 @@ export const ChatWorkspace: React.FC = () => {
   ];
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-900 overflow-hidden relative">
+    <div className="channel-chat flex-1 min-w-0 flex flex-col h-full bg-slate-900 overflow-hidden relative">
       {/* Channel Header Bar */}
-      <div className="h-14 px-5 border-b border-slate-800 flex items-center justify-between gap-4 bg-slate-950/70 backdrop-blur-sm z-10 flex-shrink-0">
+      <div className="min-h-14 py-2 px-5 flex-wrap border-b border-slate-800 flex items-center justify-between gap-4 bg-slate-950/70 backdrop-blur-sm z-10 flex-shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <div className="flex items-center gap-2 text-slate-100 font-bold text-sm">
             <Hash className="w-4 h-4 text-emerald-400 flex-shrink-0" />
@@ -129,6 +154,16 @@ export const ChatWorkspace: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-3 flex-shrink-0">
+          {channel && (canChangeTheme || isProjectOwner) && (
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              className="flex items-center gap-2 rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-200 hover:border-emerald-500"
+              onClick={() => settingsDialog.current?.showModal()}
+            >
+              <Settings2 size={14} aria-hidden="true" /> Channel settings
+            </button>
+          )}
           {/* Search Box */}
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
@@ -170,17 +205,55 @@ export const ChatWorkspace: React.FC = () => {
         </div>
       </div>
 
+      {channel && (canChangeTheme || isProjectOwner) && (
+        <dialog key={activeChannelId} ref={settingsDialog} aria-labelledby="channel-settings-title" className="channel-settings-dialog">
+          <div className="flex items-center justify-between gap-4 border-b border-slate-800 px-5 py-3">
+            <h2 id="channel-settings-title" className="text-sm font-bold">Settings for #{channel.name}</h2>
+            <form method="dialog">
+              <button type="submit" aria-label="Close channel settings" className="rounded-md p-1 hover:bg-slate-800"><X size={18} /></button>
+            </form>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 text-xs">
+          <span className="font-semibold text-slate-200">Channel admin: {adminName}</span>
+          {isProjectOwner && (
+            <label className="flex items-center gap-2 text-slate-400">
+              Transfer admin
+              <select
+                value={adminId}
+                disabled={savingAdmin}
+                className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200"
+                onChange={async (event) => {
+                  setSavingAdmin(true);
+                  try {
+                    await setChannelAdmin(channel.id, event.target.value);
+                  } finally {
+                    setSavingAdmin(false);
+                  }
+                }}
+              >
+                {!teamMembers.some((member) => member.id === adminId) && <option value={adminId}>{adminName}</option>}
+                {teamMembers.filter((member) => mode === 'local' || project.members.includes(member.id) || member.id === project.ownerId).map((member) => (
+                  <option key={member.id} value={member.id}>{member.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          </div>
+          {canChangeTheme && <ChannelThemePicker />}
+        </dialog>
+      )}
+
       {/* Message List */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+      <div className="channel-messages flex-1 overflow-y-auto px-5 py-4 space-y-4">
         {/* Welcome Message Card */}
-        <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950/30 border border-slate-800/80 mb-6">
+        <div className="channel-welcome p-4 rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950/30 border border-slate-800/80 mb-6">
           <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 flex-shrink-0">
               <Hash className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-sm font-bold text-slate-100">
-                Welcome to #{channel?.name}
+                {theme ? theme.greeting : 'Welcome to'} #{channel?.name}
               </h2>
               <p className="text-xs text-slate-400 mt-1 leading-relaxed">
                 {channel?.topic}
@@ -213,6 +286,7 @@ export const ChatWorkspace: React.FC = () => {
           </div>
         ) : (
           filteredMessages.map((msg, index) => {
+            const identity = identityFor(msg.senderId);
             const isDecisionMention =
               msg.content.toLowerCase().includes('decision confirmed') ||
               msg.content.toLowerCase().includes('settled');
@@ -236,10 +310,15 @@ export const ChatWorkspace: React.FC = () => {
 
                 {/* Message Body */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline gap-2 mb-1">
-                    <span className="text-xs font-bold text-slate-200 hover:underline cursor-pointer">
-                      {msg.senderName}
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-1">
+                    <span className="text-xs font-bold text-slate-200">
+                      {identity?.username ?? msg.senderName}
                     </span>
+                    {identity && (
+                      <span className="text-[10px] text-slate-400">
+                        <span aria-hidden="true">{identity.symbol} </span>{identity.name} · {msg.senderName}
+                      </span>
+                    )}
                     <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700/60">
                       {msg.senderRole}
                     </span>
@@ -365,6 +444,34 @@ export const ChatWorkspace: React.FC = () => {
 
       {/* Input Composer */}
       <div className="p-4 bg-slate-950/90 border-t border-slate-800">
+        {theme && myIdentity && (
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+            <p>
+              <span aria-hidden="true">{myIdentity.symbol} </span>
+              Posting as <strong className="text-emerald-400">{myIdentity.username}</strong>
+            </p>
+            <label className="flex items-center gap-2">
+              Character
+              <select
+                value={myIdentity.handle}
+                disabled={savingCharacter}
+                className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200"
+                onChange={async (event) => {
+                  setSavingCharacter(true);
+                  try {
+                    await setMyChannelCharacter(theme.id, event.target.value);
+                  } finally {
+                    setSavingCharacter(false);
+                  }
+                }}
+              >
+                {CHARACTERS[theme.id].map((character) => (
+                  <option key={character.handle} value={character.handle}>{character.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
         <form onSubmit={handleSend} className="relative">
           <div className="rounded-2xl bg-slate-900 border border-slate-800 focus-within:border-emerald-500/80 transition-colors p-2.5 shadow-inner">
             <textarea

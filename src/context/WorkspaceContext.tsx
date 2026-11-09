@@ -3,6 +3,7 @@ import {
   User,
   Project,
   Channel,
+  ChannelTheme,
   Message,
   Task,
   Decision,
@@ -40,6 +41,7 @@ import {
   arrayRemove,
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
+import { CHARACTERS } from '../data/channelIdentities';
 import { fireConfetti } from '../lib/confetti';
 
 const STORAGE_KEY = 'sermona_workspace_state_v3';
@@ -81,6 +83,7 @@ interface WorkspaceContextType {
   switchProject: (projectId: string) => void;
   joinProject: (inviteLinkOrId: string) => Promise<boolean>;
   allowedEmailDomains: string[];
+  setMyChannelCharacter: (theme: ChannelTheme, handle: string) => Promise<void>;
   updateMyProfile: (updates: { role?: string; skills?: string[] }) => void;
 
   currentUser: User;
@@ -141,6 +144,7 @@ interface WorkspaceContextType {
 
   // Project & Channel Management
   createChannel: (name: string, topic: string) => void;
+  setChannelTheme: (channelId: string, theme: ChannelTheme | null) => Promise<boolean>;
   deleteChannel: (channelId: string) => Promise<void>;
   /** Owner only: remove someone from this workspace (squad). */
   removeMember: (memberId: string) => Promise<void>;
@@ -148,6 +152,8 @@ interface WorkspaceContextType {
   canDeleteMessage: (message: Message) => boolean;
   /** True if the current user owns this workspace (always true in local demo mode). */
   isProjectOwner: boolean;
+  getChannelAdminId: (channel: Channel) => string;
+  setChannelAdmin: (channelId: string, adminId: string) => Promise<void>;
   createNewProject: (name: string, tagline: string, description: string, deadline?: string | null) => void;
   resetToDemoData: () => void;
 }
@@ -407,6 +413,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       id: newId('chan'),
       projectId: pid,
       name: 'general',
+      adminId: user.uid,
       topic: 'Welcome and project onboarding',
       description: 'Welcome and project onboarding',
       createdAt: now,
@@ -725,6 +732,26 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   const setCurrentUser = (user: User) => {
     if (IS_CLOUD) return; // in cloud mode you are whoever you signed in as
     setLocalUserId(user.id);
+  };
+
+  const setMyChannelCharacter = async (theme: ChannelTheme, handle: string) => {
+    if (!CHARACTERS[theme]?.some((character) => character.handle === handle)) return;
+
+    if (IS_CLOUD) {
+      if (!db || !cloudProjectId || !authUser) return;
+      try {
+        await updateDoc(doc(db, 'projects', cloudProjectId, 'members', authUser.uid), {
+          [`channelCharacters.${theme}`]: handle,
+        });
+      } catch (error) {
+        reportCloudError('save character preference')(error);
+      }
+      return;
+    }
+
+    setTeamMembers((previous) => previous.map((member) => member.id === currentUser.id
+      ? { ...member, channelCharacters: { ...member.channelCharacters, [theme]: handle } }
+      : member));
   };
 
   const updateMyProfile = (updates: { role?: string; skills?: string[] }) => {
@@ -1185,12 +1212,41 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   // --- CHANNEL & PROJECT CREATION ---
 
   // --- DELETING MESSAGES & CHANNELS ---
-  // Firestore rules allow: a message → its sender or the workspace owner; a channel → the owner only.
 
   const isProjectOwner = IS_CLOUD ? Boolean(authUser && project.ownerId === authUser.uid) : true;
 
-  const canDeleteMessage = (message: Message) =>
-    !IS_CLOUD || message.senderId === currentUser.id || isProjectOwner;
+  const getChannelAdminId = (channel: Channel) => {
+    const members = IS_CLOUD ? project.members : teamMembers.map((member) => member.id);
+    const ownerId = project.ownerId || currentUser.id;
+    return channel.adminId && (channel.adminId === ownerId || members.includes(channel.adminId))
+      ? channel.adminId
+      : ownerId;
+  };
+
+  const setChannelAdmin = async (channelId: string, adminId: string) => {
+    const members = IS_CLOUD ? project.members : teamMembers.map((member) => member.id);
+    if (!isProjectOwner || !channels.some((channel) => channel.id === channelId)) return;
+    if (adminId !== project.ownerId && !members.includes(adminId)) return;
+
+    if (IS_CLOUD) {
+      if (!db || !cloudProjectId) return;
+      try {
+        await updateDoc(doc(db, 'projects', cloudProjectId, 'channels', channelId), { adminId });
+      } catch (error) {
+        reportCloudError('transfer channel admin')(error);
+        return;
+      }
+    } else {
+      setChannels((previous) => previous.map((channel) => channel.id === channelId ? { ...channel, adminId } : channel));
+    }
+    addToast({ type: 'success', title: 'Channel admin updated', message: 'The new admin can moderate messages in this channel.' });
+  };
+
+  const canDeleteMessage = (message: Message) => {
+    const channel = channels.find((entry) => entry.id === message.channelId);
+    return !IS_CLOUD || message.senderId === currentUser.id || isProjectOwner ||
+      (channel !== undefined && getChannelAdminId(channel) === currentUser.id);
+  };
 
   const deleteMessage = (messageId: string) => {
     const ch = activeChannelId;
@@ -1276,12 +1332,31 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     addToast({ type: 'info', title: 'Removed from squad', message: `${member?.name || 'Member'} no longer has access.` });
   };
 
+  const setChannelTheme = async (channelId: string, theme: ChannelTheme | null): Promise<boolean> => {
+    const channel = channels.find((entry) => entry.id === channelId);
+    if (!channel || getChannelAdminId(channel) !== currentUser.id) return false;
+    if (theme !== null && !['pokemon', 'avengers', 'harry-potter', 'whimsy'].includes(theme)) return false;
+    // Persist only this field: never overwrite concurrent channel or message edits.
+    if (IS_CLOUD) {
+      if (!db || !cloudProjectId) return false;
+      try {
+        await updateDoc(doc(db, 'projects', cloudProjectId, 'channels', channelId), { theme });
+      } catch (error) {
+        reportCloudError('save channel theme')(error);
+        return false;
+      }
+    }
+    setChannels((previous) => previous.map((channel) => channel.id === channelId ? { ...channel, theme } : channel));
+    return true;
+  };
+
   const createChannel = (name: string, topic: string) => {
     const cleanName = name.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
     const newChannel: Channel = {
       id: newId('chan'),
       projectId: projectPath() || project.id,
       name: cleanName,
+      adminId: currentUser.id,
       topic: topic || 'New discussion topic',
       description: topic || 'New discussion topic',
       unreadCount: 0,
@@ -1377,6 +1452,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         joinProject,
         allowedEmailDomains: ALLOWED_EMAIL_DOMAINS,
         updateMyProfile,
+        setMyChannelCharacter,
         currentUser,
         setCurrentUser,
         teamMembers: teamMembersWithPresence,
@@ -1421,11 +1497,14 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         toggleTaskComplete,
         createDecision,
         createChannel,
+        setChannelTheme,
         deleteChannel,
         removeMember,
         deleteMessage,
         canDeleteMessage,
         isProjectOwner,
+        getChannelAdminId,
+        setChannelAdmin,
         createNewProject,
         resetToDemoData,
       }}

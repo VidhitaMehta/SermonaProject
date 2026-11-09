@@ -111,7 +111,26 @@ service cloud.firestore {
       // Channels subcollection
       match /channels/{channelId} {
         allow get, list: if isProjectMember(projectId);
-        allow create, update: if isProjectMember(projectId) && isValidId(channelId);
+        allow create: if isProjectMember(projectId) && isValidId(channelId) &&
+                      incoming().get('adminId', '') == request.auth.uid;
+        allow update: if isProjectMember(projectId) && isValidId(channelId) &&
+                      !incoming().diff(existing()).affectedKeys().hasAny(['adminId', 'theme']);
+        allow update: if isProjectMember(projectId) && isValidId(channelId) &&
+                      incoming().diff(existing()).affectedKeys().hasOnly(['theme']) &&
+                      (incoming().theme == null || incoming().theme in ['pokemon', 'avengers', 'harry-potter', 'whimsy']) &&
+                      isChannelAdmin();
+
+        function isChannelAdmin() {
+          let project = get(/databases/$(database)/documents/projects/$(projectId)).data;
+          let adminId = existing().get('adminId', '');
+          let assigned = adminId == project.ownerId || adminId in project.members;
+          return request.auth.uid == (assigned ? adminId : project.ownerId);
+        }
+        allow update: if isProjectOwner(projectId) && isValidId(channelId) &&
+                      incoming().diff(existing()).affectedKeys().hasOnly(['adminId']) &&
+                      incoming().adminId is string &&
+                      (incoming().adminId == request.auth.uid ||
+                       incoming().adminId in get(/databases/$(database)/documents/projects/$(projectId)).data.members);
         allow delete: if isProjectOwner(projectId) && isValidId(channelId);
 
         // Messages subcollection
@@ -123,7 +142,9 @@ service cloud.firestore {
                        incoming().senderId == existing().senderId &&
                        isValidMessage(incoming());
           allow update: if isProjectMember(projectId) && isReactionOnlyUpdate();
-          allow delete: if isProjectMember(projectId) && (existing().senderId == request.auth.uid || isProjectOwner(projectId));
+          allow delete: if isProjectMember(projectId) && (existing().senderId == request.auth.uid ||
+             isProjectOwner(projectId) ||
+             get(/databases/$(database)/documents/projects/$(projectId)/channels/$(channelId)).data.get('adminId', '') == request.auth.uid);
         }
       }
 

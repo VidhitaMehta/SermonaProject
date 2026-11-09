@@ -11,6 +11,7 @@ export interface User {
   avatar: string;
   role: string;
   skills?: string[];
+  channelCharacters?: Partial<Record<ChannelTheme, string>>;
   online?: boolean;
   lastSeen?: string;
   initials: string;
@@ -28,6 +29,8 @@ export interface Project {
   tags?: string[];
 }
 
+export type ChannelTheme = 'pokemon' | 'avengers' | 'harry-potter' | 'whimsy';
+
 export interface Channel {
   id: string;
   name: string;
@@ -35,6 +38,8 @@ export interface Channel {
   topic?: string;
   members?: string[];
   projectId?: string;
+  theme?: ChannelTheme | null;
+  adminId?: string;
   unreadCount?: number;
   createdAt?: string;
 }
