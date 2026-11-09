@@ -205,6 +205,7 @@ export const ChatWorkspace: React.FC = () => {
             return (
               <div
                 key={msg.id}
+                id={`msg-${msg.id}`}
                 className={`group animate-pop-in flex items-start gap-3.5 p-2 rounded-2xl transition-colors relative hover:bg-slate-850 ${
                   isDecisionMention ? 'bg-emerald-500/5 border border-emerald-500/20' : ''
                 }`}
