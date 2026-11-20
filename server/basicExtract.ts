@@ -11,6 +11,7 @@ interface InMessage {
   senderId?: string;
   senderName?: string;
   content?: string;
+  replyToId?: string | null;
 }
 
 const MAX_ITEMS = 8;
@@ -18,6 +19,32 @@ const MAX_ITEMS = 8;
 const DECISION_RE =
   /\b(decision confirmed|confirmed:|we(?:'ve| have)? decided|decided to|let(?:'s| us) go with|we(?:'re| are) going with|we(?:'ll| will) go with|we agree|agreed|final decision|we will use|we'll use|going forward we)\b/i;
 const CONFIRMED_RE = /\b(decision confirmed|confirmed:|decided|agreed|we agree|final decision)\b/i;
+
+// ---- Hinglish (Roman-script Hindi + English) cues ----
+const HI_DECISION_RE =
+  /\b(final (?:hai|ho gaya|kar diya|kiya)|decide (?:kiya|ho gaya|kar liya|hua)|tay (?:hua|ho gaya|kiya)|pakka (?:hai|raha|ho gaya)|yahi (?:use|karenge|chalega)|isi se (?:karenge|chalenge)|done hai)\b/i;
+const HI_CONFIRMED_RE = /\b(final (?:hai|ho gaya|kar diya|kiya)|decide (?:kiya|ho gaya|kar liya|hua)|tay (?:hua|ho gaya|kiya)|pakka (?:hai|ho gaya))\b/i;
+const HI_SELF_COMMIT_RE =
+  /\b((?:kar|bana|bhej|dekh|likh|fix kar|push kar|test kar|sambhal|le) ?(?:d|l)?ung[ai]|karung[ai]|kar leta hun|kar leti hun|mai(?:n)? (?:karta|karti|dekhta|dekhti|leta|leti) hu(?:n)?|meri (?:zimmedari|responsibility))\b/i;
+const HI_REQUEST_RE =
+  /\b((?:kar|bana|bhej|dekh|likh|check kar|fix kar|push kar|test kar) ?(?:do|dena|dijiye|lo|lena|sakte ho|sakti ho|sakta hai|sakti hai)|karna (?:hai|padega|hoga)|chahiye)\b/i;
+const HI_QUESTION_RE = /^(?:@?\S+[,:]?\s+)?(kya|kaun|kisne|kisko|kab|kaise|kyun|kyu|kyon|kitna|kitne|kidhar|kahan|konsa|kaunsa)\b/i;
+const HI_IDEA_RE = /\b(kyun na|kyu na|aisa karte hain|ek idea|mera idea|shayad hum|try karte hain)\b/i;
+const HI_DEADLINE_RE =
+  /\b((?:aaj|kal|parso|parson)(?: (?:subah|sham|shaam|raat|dopahar))?(?: \d{1,2} ?baje)?|(?:mon|tues|wednes|thurs|fri|satur|sun)day(?: (?:subah|sham|shaam|raat))?(?: \d{1,2} ?baje)?|\d{1,2} ?baje|week ke end|end of (?:day|week)|eod)\s+tak\b/i;
+
+const isDecision = (s: string) => DECISION_RE.test(s) || HI_DECISION_RE.test(s);
+const isConfirmed = (s: string) => CONFIRMED_RE.test(s) || HI_CONFIRMED_RE.test(s);
+const isSelfCommit = (s: string) => SELF_COMMIT_RE.test(s) || HI_SELF_COMMIT_RE.test(s);
+const isRequest = (s: string) => REQUEST_RE.test(s) || HI_REQUEST_RE.test(s);
+const isIdea = (s: string) => IDEA_RE.test(s) || HI_IDEA_RE.test(s);
+const isQuestionText = (s: string) => s.endsWith('?') || HI_QUESTION_RE.test(s);
+const findDeadline = (s: string): string | null => {
+  const en = s.match(DEADLINE_RE);
+  if (en) return en[1];
+  const hi = s.match(HI_DEADLINE_RE);
+  return hi ? `${hi[1]} tak` : null;
+};
 
 const SELF_COMMIT_RE = /\b(i(?:'ll| will)|i can|i(?:'m| am) going to|i(?:'ll| will) take|i(?:'m| am) on it|i(?:'ll| will) handle)\b/i;
 const REQUEST_RE = /\b(can you|could you|would you|please|todo|to-do|action item|needs? to|we need to|someone should)\b/i;
@@ -37,7 +64,7 @@ const stripMarkdown = (text: string) => text.replace(/\*\*|__|`/g, '');
 
 const splitSentences = (text: string) =>
   stripMarkdown(text)
-    .split(/(?<=[.!?])\s+|\n+/)
+    .split(/(?<=[.!?।])\s+|\n+/)
     .map((s) => s.trim())
     .filter((s) => s.length >= 8);
 
@@ -53,6 +80,8 @@ function taskTitleFrom(sentence: string): string {
     .replace(/^(ok(?:ay)?|so|also|and)[,!]?\s+/i, '')
     .replace(/\b(i(?:'ll| will)|i can|i(?:'m| am) going to|i(?:'ll| will) take care of|can you|could you|would you|please|we need to|someone should|needs? to)\s+/i, '')
     .replace(DEADLINE_RE, '')
+    .replace(HI_DEADLINE_RE, '')
+    .replace(/^(main|mai|mein|hum)\s+/i, '')
     .replace(/\s{2,}/g, ' ')
     .replace(/\s+([,.!?])/g, '$1')
     .replace(/[?.!,]+$/, '')
@@ -90,11 +119,11 @@ export function basicExtract(
     }
 
     for (const sentence of splitSentences(content)) {
-      const isQuestion = sentence.endsWith('?');
+      const isQuestion = isQuestionText(sentence);
 
       // Decisions
-      if (DECISION_RE.test(sentence) && !isQuestion && decisions.length < MAX_ITEMS) {
-        const confirmed = CONFIRMED_RE.test(sentence);
+      if (isDecision(sentence) && !isQuestion && decisions.length < MAX_ITEMS) {
+        const confirmed = isConfirmed(sentence);
         decisions.push({
           decisionId: `dec_basic_${mi}_${decisions.length}`,
           title: clip(sentence.replace(/^(decision confirmed|confirmed)\s*[:\-–]\s*/i, ''), 90),
@@ -109,8 +138,8 @@ export function basicExtract(
       }
 
       // Tasks: someone commits ("I'll…") or asks someone to do something ("Alex, can you…")
-      const selfCommit = SELF_COMMIT_RE.test(sentence) && !isQuestion;
-      const request = REQUEST_RE.test(sentence);
+      const selfCommit = isSelfCommit(sentence) && !isQuestion;
+      const request = isRequest(sentence);
       if ((selfCommit || request) && proposedTasks.length < MAX_ITEMS) {
         const title = taskTitleFrom(sentence);
         if (existing.some((e) => e && (e.includes(title.toLowerCase()) || title.toLowerCase().includes(e)))) continue;
@@ -130,8 +159,7 @@ export function basicExtract(
             suggestedAssignee = named.name;
           }
         }
-        const deadlineMatch = sentence.match(DEADLINE_RE);
-        const deadline = deadlineMatch ? deadlineMatch[1] : null;
+        const deadline = findDeadline(sentence);
 
         proposedTasks.push({
           taskId: `task_basic_${mi}_${proposedTasks.length}`,
@@ -154,7 +182,10 @@ export function basicExtract(
       if (isQuestion && unresolvedQuestions.length < MAX_ITEMS) {
         // Treat it as answered if a different person replied right after
         const next = messages[mi + 1];
-        const likelyAnswered = Boolean(next && next.senderId !== m.senderId && !String(next.content || '').trim().endsWith('?'));
+        const answeredByReply = messages.some((other) => other.replyToId === m.id && other.senderId !== m.senderId);
+        const likelyAnswered =
+          answeredByReply ||
+          Boolean(next && next.senderId !== m.senderId && !isQuestionText(String(next.content || '').trim()));
         unresolvedQuestions.push({
           id: `q_basic_${mi}_${unresolvedQuestions.length}`,
           question: clip(sentence, 200),
@@ -168,7 +199,7 @@ export function basicExtract(
       }
 
       // Ideas
-      if (IDEA_RE.test(sentence) && ideas.length < MAX_ITEMS) {
+      if (isIdea(sentence) && ideas.length < MAX_ITEMS) {
         ideas.push({
           id: `idea_basic_${mi}_${ideas.length}`,
           title: clip(sentence, 90),

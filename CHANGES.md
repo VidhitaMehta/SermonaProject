@@ -55,3 +55,20 @@ Without a Firebase config, the app runs in **local demo mode** as before, with s
 ## Not done yet
 - **Voice channels**: need WebRTC or a service like LiveKit/Agora. They're a separate piece of work.
 - Unread counts per channel are still static.
+
+---
+
+# Update: bug fixes + chat features (Nov 2026)
+
+## Fixes
+- **Workspace invites work.** "Copy invite link" (Squad tab) now creates a real `?invite=` link (valid 7 days). Old `?project=` links can't add anyone, because non-members can't read the project.
+- **Jump to source message works from anywhere.** Tasks now store `channelId`. Old tasks without one are found by looking the message up in each channel.
+- **Scroll-to-message timing.** The chat waits until the target message has actually loaded before scrolling and highlighting, and no longer jumps back to the bottom.
+- **No more decision id collisions.** Every analysed item gets a unique id, so confirming a decision in one channel can't overwrite one from another channel.
+- **Re-running analysis keeps review work.** Edited, ticked, confirmed or owner-assigned items stay. Rejected tasks aren't proposed again, and tasks already on the board are skipped.
+
+## New
+- **Hinglish understanding**: Gemini prompt rules, plus Hinglish patterns in the basic (no-AI) extractor ("kal tak bana dunga", "final hai", "kisne dekha").
+- **New-message pop-ups** for every channel (cloud mode). "Open" jumps to the message, @mentions are highlighted, a browser notification shows when the tab is in the background, and channels show live unread counts.
+- **@mentions**: type `@` to pick a teammate (arrow keys / Enter / Tab). Tags are highlighted and saved as `mentions` on the message.
+- **Reply to a message**: swipe right (touch or mouse drag) or use the Reply button. The quoted message shows above the reply, and clicking it jumps to the original. Replies are passed to the AI too.

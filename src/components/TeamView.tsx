@@ -4,7 +4,7 @@ import { Users, Mail, Edit2, Check, X, AlertTriangle, Link2 } from 'lucide-react
 import { getDeadlineState } from '../lib/deadlines';
 
 export const TeamView: React.FC = () => {
-  const { teamMembers, currentUser, setCurrentUser, tasks, mode, updateMyProfile, inviteLink, addToast, isProjectOwner, removeMember } =
+  const { teamMembers, currentUser, setCurrentUser, tasks, mode, updateMyProfile, inviteLink, addToast, isProjectOwner, removeMember, createRecruitInvite } =
     useWorkspace();
   const isCloud = mode === 'cloud';
 
@@ -26,13 +26,23 @@ export const TeamView: React.FC = () => {
     setEditing(false);
   };
 
+  const [creatingInvite, setCreatingInvite] = useState(false);
+
+  // Creates a real workspace-wide invite (?invite=TOKEN, valid 7 days).
+  // The old ?project=ID link could never add anyone: non-members can't read the project.
   const copyInvite = async () => {
-    if (!inviteLink) return;
+    setCreatingInvite(true);
+    const link = await createRecruitInvite();
+    setCreatingInvite(false);
+    if (!link) {
+      addToast({ type: 'error', title: 'Could not create invite', message: 'Only workspace members can invite people.' });
+      return;
+    }
     try {
-      await navigator.clipboard.writeText(inviteLink);
-      addToast({ type: 'success', title: 'Invite link copied', message: 'Teammates join after signing in with it.' });
+      await navigator.clipboard.writeText(link);
+      addToast({ type: 'success', title: 'Invite link copied', message: 'Valid for 7 days. Teammates sign in with their @thapar.edu account.' });
     } catch {
-      addToast({ type: 'info', title: 'Invite link', message: inviteLink });
+      addToast({ type: 'info', title: 'Invite link', message: link });
     }
   };
 
@@ -60,9 +70,10 @@ export const TeamView: React.FC = () => {
         {isCloud && inviteLink && (
           <button
             onClick={copyInvite}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-semibold cursor-pointer"
+            disabled={creatingInvite}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-semibold cursor-pointer disabled:opacity-50"
           >
-            <Link2 className="w-3.5 h-3.5" /> Copy invite link
+            <Link2 className="w-3.5 h-3.5" /> {creatingInvite ? 'Creating link…' : 'Copy invite link'}
           </button>
         )}
       </div>

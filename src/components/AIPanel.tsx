@@ -606,7 +606,7 @@ export const AIPanel: React.FC = () => {
                                 {task.sourceMessageIds.map((id) => (
                                   <button
                                     key={id}
-                                    onClick={() => jumpToMessage(id)}
+                                    onClick={() => jumpToMessage(id, currentAnalysis.channelId)}
                                     className="font-mono text-emerald-400/80 bg-slate-950 px-1 py-0.2 rounded border border-slate-850 hover:border-emerald-400 cursor-pointer"
                                     title="Jump to this message"
                                   >

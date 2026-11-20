@@ -3,6 +3,9 @@ import { Portal } from './Portal';
 import { CHARACTERS, getChannelIdentity } from '../data/channelIdentities';
 import { getChannelTheme } from '../data/channelThemes';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { SwipeToReply } from './SwipeToReply';
+import { findMentions, mentionAtCaret, renderWithMentions } from '../lib/mentions';
+import { Message } from '../types';
 import {
   Settings2,
   Sparkles,
@@ -22,6 +25,7 @@ import {
   X,
   Loader2,
   Trash2,
+  Reply,
 } from 'lucide-react';
 
 export const ChatWorkspace: React.FC = () => {
@@ -46,6 +50,7 @@ export const ChatWorkspace: React.FC = () => {
     setMyChannelCharacter,
     currentUser,
     isChannelGuest,
+    jumpToMessage,
   } = useWorkspace();
 
   const [inputContent, setInputContent] = useState('');
@@ -56,6 +61,53 @@ export const ChatWorkspace: React.FC = () => {
   const [activeReactionPickerMsgId, setActiveReactionPickerMsgId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // ---- reply (swipe right / Reply button) ----
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const startReply = (msg: Message) => {
+    setReplyTo(msg);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  // ---- @mention picker ----
+  const [mention, setMention] = useState<{ query: string; start: number } | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const mentionCandidates = mention
+    ? teamMembers
+        .filter((m) => m.id !== currentUser.id && m.name.toLowerCase().includes(mention.query.toLowerCase()))
+        .slice(0, 6)
+    : [];
+  const updateMention = (text: string, caret: number) => {
+    setMention(mentionAtCaret(text, caret));
+    setMentionIndex(0);
+  };
+  const pickMention = (memberName: string) => {
+    if (!mention) return;
+    const caret = inputRef.current?.selectionStart ?? inputContent.length;
+    const insert = `@${memberName} `;
+    const next = inputContent.slice(0, mention.start) + insert + inputContent.slice(caret);
+    setInputContent(next);
+    setMention(null);
+    const pos = mention.start + insert.length;
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(pos, pos);
+    });
+  };
+
+  // Mentions + reply info sent along with a message
+  const messageExtras = (text: string) => ({
+    mentions: findMentions(text, teamMembers),
+    replyTo: replyTo
+      ? {
+          messageId: replyTo.id,
+          senderId: replyTo.senderId,
+          senderName: replyTo.senderName,
+          snippet: (replyTo.content || (replyTo.codeSnippet ? 'Code snippet' : '')).slice(0, 140),
+        }
+      : undefined,
+  });
   const channel = channels.find((c) => c.id === activeChannelId);
   const theme = getChannelTheme(channel?.theme);
   const characterChoices = new Map(teamMembers.map((member) => [member.id, member.channelCharacters]));
@@ -80,39 +132,60 @@ export const ChatWorkspace: React.FC = () => {
     );
   });
 
+  // Auto-scroll to the newest message, except while a jump-to-message is in progress
   useEffect(() => {
+    if (highlightedMessageId) return;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentMessages.length, activeChannelId]);
 
+  // Jump-to-message: in cloud mode the channel's messages arrive a moment after switching,
+  // so wait until the target is actually rendered (re-runs whenever messages change).
   useEffect(() => {
     if (!highlightedMessageId) return;
-    const scrollTimer = setTimeout(() => {
-      document.getElementById(`msg-${highlightedMessageId}`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 150);
+    const el = document.getElementById(`msg-${highlightedMessageId}`);
+    if (!el) return; // not rendered yet
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     const clearTimer = setTimeout(() => setHighlightedMessageId(null), 3000);
-    return () => {
-      clearTimeout(scrollTimer);
-      clearTimeout(clearTimer);
-    };
-  }, [highlightedMessageId, activeChannelId, setHighlightedMessageId]);
+    return () => clearTimeout(clearTimer);
+  }, [highlightedMessageId, activeChannelId, currentMessages.length, setHighlightedMessageId]);
+
+  // Give up if the message never shows up (deleted, or older than the last 500 loaded)
+  useEffect(() => {
+    if (!highlightedMessageId) return;
+    const giveUp = setTimeout(() => {
+      if (!document.getElementById(`msg-${highlightedMessageId}`)) setHighlightedMessageId(null);
+    }, 8000);
+    return () => clearTimeout(giveUp);
+  }, [highlightedMessageId, setHighlightedMessageId]);
+
+  // A reply belongs to one channel; drop it when switching
+  useEffect(() => {
+    setReplyTo(null);
+    setMention(null);
+  }, [activeChannelId]);
 
   const handleSend = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!inputContent.trim()) return;
-    sendMessage(inputContent);
+    sendMessage(inputContent, undefined, messageExtras(inputContent));
     setInputContent('');
+    setReplyTo(null);
+    setMention(null);
   };
 
   const handleSendSnippet = (e: React.FormEvent) => {
     e.preventDefault();
     if (!snippetCode.trim()) return;
-    sendMessage(inputContent || 'Shared code benchmark snippet:', {
-      language: snippetLanguage,
-      code: snippetCode.trim(),
-    });
+    const text = inputContent || 'Shared a code snippet:';
+    sendMessage(
+      text,
+      { language: snippetLanguage, code: snippetCode.trim() },
+      messageExtras(text)
+    );
     setSnippetCode('');
     setInputContent('');
+    setReplyTo(null);
     setShowCodeSnippetModal(false);
   };
 
@@ -246,14 +319,15 @@ export const ChatWorkspace: React.FC = () => {
             const isDecisionMention =
               msg.content.toLowerCase().includes('decision confirmed') ||
               msg.content.toLowerCase().includes('settled');
+            const mentionsMe = (msg.mentions || []).includes(currentUser.id);
 
             return (
+              <SwipeToReply key={msg.id} onReply={() => startReply(msg)}>
               <div
-                key={msg.id}
                 id={`msg-${msg.id}`}
                  className={`group animate-pop-in flex items-start gap-3.5 p-2 rounded-2xl transition-colors relative hover:bg-slate-850 ${
                   isDecisionMention ? 'bg-emerald-500/5 border border-emerald-500/20' : ''
-                } ${
+                } ${mentionsMe ? 'border-l-2 border-amber-400 bg-amber-500/5' : ''} ${
                   highlightedMessageId === msg.id ? 'ring-2 ring-emerald-400 bg-emerald-500/10' : ''
                 }`}
               >
@@ -288,9 +362,24 @@ export const ChatWorkspace: React.FC = () => {
                     )}
                   </div>
 
+                  {/* Quoted message this one replies to (click to jump to it) */}
+                  {msg.replyTo && (
+                    <button
+                      type="button"
+                      onClick={() => jumpToMessage(msg.replyTo!.messageId, msg.channelId)}
+                      className="mb-1.5 block w-full max-w-md text-left border-l-2 border-emerald-400 bg-slate-950/70 hover:bg-slate-950 rounded-r-lg px-2.5 py-1 cursor-pointer"
+                      title="Go to the original message"
+                    >
+                      <span className="block text-[10px] font-semibold text-emerald-400">
+                        {identityFor(msg.replyTo.senderId)?.username ?? msg.replyTo.senderName}
+                      </span>
+                      <span className="block text-[11px] text-slate-400 truncate">{msg.replyTo.snippet}</span>
+                    </button>
+                  )}
+
                   {/* Text Content */}
                   <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-line font-sans break-words">
-                    {msg.content}
+                    {renderWithMentions(msg.content, teamMembers, currentUser.id)}
                   </div>
 
                   {/* Code snippet if present */}
@@ -345,6 +434,13 @@ export const ChatWorkspace: React.FC = () => {
                   >
                     <Smile className="w-3.5 h-3.5" />
                   </button>
+                  <button
+                    onClick={() => startReply(msg)}
+                    className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-800 text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer"
+                    title="Reply (or swipe right)"
+                  >
+                    <Reply className="w-3.5 h-3.5" />
+                  </button>
                   {canDeleteMessage(msg) && (
                     <button
                       onClick={() => {
@@ -376,6 +472,7 @@ export const ChatWorkspace: React.FC = () => {
                   </div>
                 )}
               </div>
+              </SwipeToReply>
             );
           })
         )}
@@ -428,19 +525,101 @@ export const ChatWorkspace: React.FC = () => {
             </label>
           </div>
         )}
+        {/* Replying-to preview */}
+        {replyTo && (
+          <div className="mb-2 flex items-start gap-2 rounded-xl border border-slate-800 bg-slate-900 px-3 py-2">
+            <Reply className="w-3.5 h-3.5 text-emerald-400 mt-0.5 flex-shrink-0" />
+            <button
+              type="button"
+              onClick={() => jumpToMessage(replyTo.id, replyTo.channelId)}
+              className="flex-1 min-w-0 text-left border-l-2 border-emerald-400 pl-2 cursor-pointer"
+            >
+              <span className="block text-[10px] font-semibold text-emerald-400">
+                Replying to {identityFor(replyTo.senderId)?.username ?? replyTo.senderName}
+              </span>
+              <span className="block text-[11px] text-slate-400 truncate">
+                {replyTo.content || (replyTo.codeSnippet ? 'Code snippet' : '')}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setReplyTo(null)}
+              className="text-slate-500 hover:text-slate-200"
+              title="Cancel reply (Esc)"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
         <form onSubmit={handleSend} className="relative">
+          {/* @mention picker */}
+          {mention && mentionCandidates.length > 0 && (
+            <div className="absolute bottom-full left-0 mb-2 w-64 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl z-30 overflow-hidden">
+              <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-slate-500 border-b border-slate-800">
+                Tag a teammate
+              </div>
+              {mentionCandidates.map((m, i) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()} // keep focus in the textarea
+                  onClick={() => pickMention(m.name)}
+                  onMouseEnter={() => setMentionIndex(i)}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-left text-xs cursor-pointer ${
+                    i === mentionIndex ? 'bg-emerald-500/15 text-emerald-300' : 'text-slate-200 hover:bg-slate-800'
+                  }`}
+                >
+                  <img src={m.avatar} alt="" className="w-6 h-6 rounded-full object-cover" />
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold">{m.name}</span>
+                    <span className="block truncate text-[10px] text-slate-500">{m.role}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="rounded-2xl bg-slate-900 border border-slate-800 focus-within:border-emerald-500/80 transition-colors p-2.5 shadow-inner">
             <textarea
+              ref={inputRef}
               rows={2}
               value={inputContent}
-              onChange={(e) => setInputContent(e.target.value)}
+              onChange={(e) => {
+                setInputContent(e.target.value);
+                updateMention(e.target.value, e.target.selectionStart ?? e.target.value.length);
+              }}
+              onClick={(e) => updateMention(e.currentTarget.value, e.currentTarget.selectionStart ?? 0)}
+              onBlur={() => setMention(null)}
               onKeyDown={(e) => {
+                // Keyboard control for the @mention list
+                if (mention && mentionCandidates.length > 0) {
+                  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    const step = e.key === 'ArrowDown' ? 1 : -1;
+                    setMentionIndex((i) => (i + step + mentionCandidates.length) % mentionCandidates.length);
+                    return;
+                  }
+                  if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault();
+                    pickMention(mentionCandidates[mentionIndex]?.name || mentionCandidates[0].name);
+                    return;
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setMention(null);
+                    return;
+                  }
+                }
+                if (e.key === 'Escape' && replyTo) {
+                  e.preventDefault();
+                  setReplyTo(null);
+                  return;
+                }
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   handleSend();
                 }
               }}
-              placeholder={`Message #${channel?.name || 'channel'} (Press Enter to send, Shift+Enter for newline)...`}
+              placeholder={`Message #${channel?.name || 'channel'} (Enter to send, Shift+Enter for newline, @ to tag someone)...`}
               className="w-full bg-transparent text-xs text-slate-200 placeholder-slate-500 focus:outline-none resize-none leading-relaxed font-sans"
             />
 
@@ -455,7 +634,7 @@ export const ChatWorkspace: React.FC = () => {
                   <Code2 className="w-4 h-4" />
                 </button>
                 <span className="text-[10px] text-slate-500 pl-2 hidden md:inline">
-                  Markdown formatting supported
+                  Type @ to tag · swipe a message right to reply
                 </span>
               </div>
 

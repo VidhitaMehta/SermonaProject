@@ -35,6 +35,7 @@ export const Sidebar: React.FC = () => {
     deleteChannel,
     isProjectOwner,
     getChannelAdminId,
+    unreadCounts,
   } = useWorkspace();
   const isCloud = mode === 'cloud';
 
@@ -123,6 +124,7 @@ export const Sidebar: React.FC = () => {
             {channels.map((chan) => {
               const isSelected = activeChannelId === chan.id && activeTab === 'channels';
               const canDelete = isProjectOwner && channels.length > 1;
+              const unread = unreadCounts[chan.id] ?? chan.unreadCount ?? 0;
               return (
                 <div key={chan.id} className="relative group/chan">
                   <button
@@ -141,9 +143,9 @@ export const Sidebar: React.FC = () => {
                       <span className="truncate">{chan.name}</span>
                       {isSelected && <span className="w-1.5 h-3 bg-emerald-500 animate-blink" />}
                     </span>
-                    {!isSelected && chan.unreadCount && chan.unreadCount > 0 ? (
+                    {!isSelected && unread > 0 ? (
                       <span className="min-w-[20px] h-4 px-1 rounded-sm text-[10px] font-bold bg-amber-500 text-slate-950 flex items-center justify-center group-hover/chan:hidden">
-                        {chan.unreadCount}
+                        {unread > 99 ? '99+' : unread}
                       </span>
                     ) : null}
                   </button>
