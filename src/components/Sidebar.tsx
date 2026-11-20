@@ -3,7 +3,8 @@ import { Portal } from './Portal';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { Plus, LayoutGrid, Crosshair, FileCheck2, Radar, Users, Settings2, RotateCcw, X, Trash2, ChevronRight } from 'lucide-react';
 import { ViewTab } from '../types';
-
+import ChannelFlashcard from './ChannelFlashCard';
+import { createPortal } from 'react-dom';
 /** Little 4-bar "signal strength" indicator used for online status. */
 const SignalBars: React.FC<{ online: boolean }> = ({ online }) => (
   <span className="flex items-end gap-[2px] h-3" title={online ? 'Online' : 'Offline'}>
@@ -34,9 +35,12 @@ export const Sidebar: React.FC = () => {
     isChannelGuest,
     deleteChannel,
     isProjectOwner,
+
     getChannelAdminId,
     unreadCounts,
+
   } = useWorkspace();
+  const [flashcard, setFlashcard] = useState<{ id: string; top: number; left: number } | null>(null);
   const isCloud = mode === 'cloud';
 
   const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
@@ -126,7 +130,24 @@ export const Sidebar: React.FC = () => {
               const canDelete = isProjectOwner && channels.length > 1;
               const unread = unreadCounts[chan.id] ?? chan.unreadCount ?? 0;
               return (
-                <div key={chan.id} className="relative group/chan">
+                 <div
+                  key={chan.id}
+                  className="relative group/chan"
+                  onMouseEnter={(e) => {
+                    const r = e.currentTarget.getBoundingClientRect();
+                    setFlashcard({ id: chan.id, top: r.top, left: r.right + 8 });
+                  }}
+                  onMouseLeave={() => setFlashcard(null)}
+                >
+                  {flashcard?.id === chan.id &&
+                    createPortal(
+                      <div
+                        style={{ position: 'fixed', top: flashcard.top, left: flashcard.left, zIndex: 9999, pointerEvents: 'none' }}
+                      >
+                        <ChannelFlashcard channel={chan} />
+                      </div>,
+                      document.body
+                    )}
                   <button
                     onClick={() => {
                       setActiveChannelId(chan.id);
