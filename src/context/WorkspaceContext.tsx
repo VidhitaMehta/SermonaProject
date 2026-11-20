@@ -41,6 +41,7 @@ import {
   onSnapshot,
   arrayUnion,
   arrayRemove,
+  getCountFromServer,
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
 import { CHARACTERS } from '../data/channelIdentities';
@@ -68,6 +69,12 @@ export interface ToastNotification {
   action?: { label: string; run: () => void };
   /** Toasts with the same key replace each other instead of stacking */
   groupKey?: string;
+}
+
+/** Message totals for a channel, used by the sidebar flashcard. */
+export interface ChannelContributors {
+  total: number;
+  top: { name: string; count: number } | null;
 }
 
 export interface ProjectSummary {
@@ -112,6 +119,10 @@ interface WorkspaceContextType {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   currentAnalysis: AIAnalysisResult | null;
+    /** Saved AI analysis of every channel (cloud: kept live for all channels) */
+  channelAnalyses: Record<string, AIAnalysisResult>;
+  /** Total messages + top contributor of a channel, even if it was never opened */
+  getChannelContributors: (channelId: string) => Promise<ChannelContributors>;
   isAnalyzing: boolean;
   analysisError: string | null;
   firebaseStatus: FirebaseStatus;
@@ -813,7 +824,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       (snap) => setMessages((prev) => ({ ...prev, [ch]: snap.docs.map((d) => d.data() as Message) })),
       reportCloudError('messages')
     );
-    const unsubAnalysis = onSnapshot(
+        const unsubAnalysis = onSnapshot(
       doc(db, `projects/${pid}/analyses`, ch),
       (snap) =>
         setAnalyses((prev) => {
@@ -826,7 +837,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     );
     return () => {
       unsubMessages();
-      unsubAnalysis();
+      
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudProjectId, activeChannelId, activeChannelAvailable]);
@@ -898,6 +909,62 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudProjectId, authUser, channelKey]);
 
+   // Saved AI analysis for EVERY channel (the flashcard shows each channel's AI-suggested tasks)
+  useEffect(() => {
+    if (!IS_CLOUD || !db || !cloudProjectId || !channelKey) return;
+    const pid = cloudProjectId;
+    const unsubs = channelKey.split(',').map((ch) =>
+      onSnapshot(
+        doc(db!, `projects/${pid}/analyses`, ch),
+        (snap) =>
+          setAnalyses((prev) => {
+            const next = { ...prev };
+            if (snap.exists()) next[ch] = snap.data() as AIAnalysisResult;
+            else delete next[ch];
+            return next;
+          }),
+        reportCloudError('analysis')
+      )
+    );
+    return () => unsubs.forEach((u) => u());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloudProjectId, channelKey]);
+
+  // Top contributor without downloading messages: Firestore count queries, cached for 60s
+  const contributorCache = useRef<Record<string, { at: number; data: ChannelContributors }>>({});
+  const getChannelContributors = async (channelId: string): Promise<ChannelContributors> => {
+    const fromLoaded = (): ChannelContributors => {
+      const list = messages[channelId] || [];
+      const counts: Record<string, { name: string; count: number }> = {};
+      list.forEach((m) => {
+        counts[m.senderId] = { name: m.senderName, count: (counts[m.senderId]?.count || 0) + 1 };
+      });
+      const top = Object.values(counts).sort((a, b) => b.count - a.count)[0] || null;
+      return { total: list.length, top };
+    };
+    if (!IS_CLOUD || !db || !cloudProjectId) return fromLoaded();
+
+    const cached = contributorCache.current[channelId];
+    if (cached && Date.now() - cached.at < 60_000) return cached.data;
+
+    const col = collection(db, 'projects', cloudProjectId, 'channels', channelId, 'messages');
+    try {
+      const [totalSnap, ...perMember] = await Promise.all([
+        getCountFromServer(col),
+        ...teamMembers.map((m) => getCountFromServer(query(col, where('senderId', '==', m.id)))),
+      ]);
+      const ranked = teamMembers
+        .map((m, i) => ({ name: m.name, count: perMember[i].data().count }))
+        .filter((x) => x.count > 0)
+        .sort((a, b) => b.count - a.count);
+      const data = { total: totalSnap.data().count, top: ranked[0] || null };
+      contributorCache.current[channelId] = { at: Date.now(), data };
+      return data;
+    } catch (err) {
+      console.warn('Contributor count failed:', err);
+      return fromLoaded();
+    }
+  };
   // Opening a channel clears its unread count
   useEffect(() => {
     if (activeTab !== 'channels' || !activeChannelId) return;
@@ -1847,6 +1914,8 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         setChannelAdmin,
         createNewProject,
         resetToDemoData,
+        channelAnalyses: analyses,
+        getChannelContributors,
       }}
     >
       {children}

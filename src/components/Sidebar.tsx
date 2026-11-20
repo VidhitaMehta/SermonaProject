@@ -135,7 +135,7 @@ export const Sidebar: React.FC = () => {
                   className="relative group/chan"
                   onMouseEnter={(e) => {
                     const r = e.currentTarget.getBoundingClientRect();
-                    setFlashcard({ id: chan.id, top: r.top, left: r.right + 8 });
+                    setFlashcard({ id: chan.id, top: Math.max(8, Math.min(r.top, window.innerHeight - 420)), left: r.right + 8 });
                   }}
                   onMouseLeave={() => setFlashcard(null)}
                 >
