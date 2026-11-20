@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Portal } from './Portal';
-import { ChannelThemePicker } from './ChannelThemePicker';
 import { CHARACTERS, getChannelIdentity } from '../data/channelIdentities';
 import { getChannelTheme } from '../data/channelThemes';
 import { useWorkspace } from '../context/WorkspaceContext';
@@ -36,27 +35,21 @@ export const ChatWorkspace: React.FC = () => {
     isAnalyzing,
     searchQuery,
     setSearchQuery,
-    project,
     deleteMessage,
     canDeleteMessage,
     highlightedMessageId,
     setHighlightedMessageId,
     getChannelAdminId,
-    setChannelAdmin,
     isProjectOwner,
+    setActiveTab,
     teamMembers,
     setMyChannelCharacter,
     currentUser,
-    mode,
-    createRecruitInvite,
-    addToast,
     isChannelGuest,
   } = useWorkspace();
 
   const [inputContent, setInputContent] = useState('');
   const [savingCharacter, setSavingCharacter] = useState(false);
-  const [savingAdmin, setSavingAdmin] = useState(false);
-  const settingsDialog = useRef<HTMLDialogElement>(null);
   const [showCodeSnippetModal, setShowCodeSnippetModal] = useState(false);
   const [snippetLanguage, setSnippetLanguage] = useState('python');
   const [snippetCode, setSnippetCode] = useState('');
@@ -71,7 +64,6 @@ export const ChatWorkspace: React.FC = () => {
   const myIdentity = identityFor(currentUser.id);
   const adminId = channel ? getChannelAdminId(channel) : '';
   const canChangeTheme = Boolean(channel && adminId === currentUser.id);
-  const adminName = teamMembers.find((member) => member.id === adminId)?.name ?? 'Workspace owner';
   const currentMessages = messages[activeChannelId] || [];
 
   // Filter messages based on search query
@@ -160,9 +152,8 @@ export const ChatWorkspace: React.FC = () => {
           {channel && (canChangeTheme || isProjectOwner) && (
             <button
               type="button"
-              aria-haspopup="dialog"
               className="flex items-center gap-2 rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-200 hover:border-emerald-500"
-              onClick={() => settingsDialog.current?.showModal()}
+              onClick={() => setActiveTab('channel-settings')}
             >
               <Settings2 size={14} aria-hidden="true" /> Channel settings
             </button>
@@ -207,74 +198,6 @@ export const ChatWorkspace: React.FC = () => {
           </button>
         </div>
       </div>
-
-      {channel && (canChangeTheme || isProjectOwner) && (
-        <dialog key={activeChannelId} ref={settingsDialog} aria-labelledby="channel-settings-title" className="channel-settings-dialog">
-          <div className="flex items-center justify-between gap-4 border-b border-slate-800 px-5 py-3">
-            <h2 id="channel-settings-title" className="text-sm font-bold">Settings for #{channel.name}</h2>
-            <form method="dialog">
-              <button type="submit" aria-label="Close channel settings" className="rounded-md p-1 hover:bg-slate-800"><X size={18} /></button>
-            </form>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 text-xs">
-          <span className="font-semibold text-slate-200">Channel admin: {adminName}</span>
-          {isProjectOwner && (
-            <label className="flex items-center gap-2 text-slate-400">
-              Transfer admin
-              <select
-                value={adminId}
-                disabled={savingAdmin}
-                className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-slate-200"
-                onChange={async (event) => {
-                  setSavingAdmin(true);
-                  try {
-                    await setChannelAdmin(channel.id, event.target.value);
-                  } finally {
-                    setSavingAdmin(false);
-                  }
-                }}
-              >
-                {!teamMembers.some((member) => member.id === adminId) && <option value={adminId}>{adminName}</option>}
-                {teamMembers.filter((member) => mode === 'local' || project.members.includes(member.id) || member.id === project.ownerId).map((member) => (
-                  <option key={member.id} value={member.id}>{member.name}</option>
-                ))}
-              </select>
-            </label>
-          )}
-          </div>
-          {canChangeTheme && (
-            <div className="border-t border-slate-800 px-5 py-3">
-              <button type="button" className="rounded-md bg-emerald-500 px-3 py-2 text-xs font-bold text-slate-950" onClick={async () => {
-                const link = await createRecruitInvite(channel.id);
-                if (!link) return;
-                try {
-                  await navigator.clipboard.writeText(link);
-                  addToast({ type: 'success', title: 'Channel invite copied', message: 'This link grants access only to this channel. Valid for 7 days.' });
-                } catch {
-                  addToast({ type: 'info', title: 'Channel invite link', message: link });
-                }
-              }}>Recruit to channel</button>
-              <p className="mt-2 text-xs text-slate-400">Invitees can chat in this channel. Full workspace access requires a workspace invite.</p>
-            </div>
-          )}
-          <section className="border-t border-slate-800 px-5 py-3" aria-label="Channel members">
-            <h3 className="mb-2 text-xs font-bold text-slate-200">Channel recruits</h3>
-            <p className="mb-3 text-xs text-slate-400">Members invited specifically to this channel. Workspace members also have access.</p>
-            {teamMembers.filter((member) => channel.members?.includes(member.id) && !project.members.includes(member.id)).length === 0 ? (
-              <p className="text-xs text-slate-500">No channel-only recruits yet.</p>
-            ) : (
-              <ul className="space-y-2">
-                {teamMembers.filter((member) => channel.members?.includes(member.id) && !project.members.includes(member.id)).map((member) => (
-                  <li key={member.id} className="flex items-center gap-2 text-xs text-slate-300">
-                    <img src={member.avatar} alt="" className="h-6 w-6 rounded-full" />{member.name}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-          {canChangeTheme && <ChannelThemePicker />}
-        </dialog>
-      )}
 
       {/* Message List */}
       <div className="channel-messages flex-1 overflow-y-auto px-5 py-4 space-y-4">

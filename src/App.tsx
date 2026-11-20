@@ -2,6 +2,7 @@ import React from 'react';
 import { getChannelTheme } from './data/channelThemes';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
 import { WorkspaceRail } from './components/WorkspaceRail';
+import { ChannelManagement } from './components/ChannelManagement';
 import { Sidebar } from './components/Sidebar';
 import { HomeView } from './components/HomeView';
 import { ChatWorkspace } from './components/ChatWorkspace';
@@ -37,6 +38,8 @@ const MainLayout: React.FC = () => {
               <ChatWorkspace />
               {!isChannelGuest && <AIPanel />}
             </>
+          ) : activeTab === 'channel-settings' ? (
+            <ChannelManagement />
           ) : activeTab === 'tasks' ? (
             <TaskDashboard />
           ) : activeTab === 'decisions' ? (

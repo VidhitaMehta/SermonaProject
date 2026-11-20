@@ -196,4 +196,4 @@ export interface AIAnalysisResult {
   teamInsights?: TeamInsights;
 }
 
-export type ViewTab = 'channels' | 'dashboard' | 'tasks' | 'decisions' | 'insights' | 'team';
+export type ViewTab = 'channel-settings' | 'channels' | 'dashboard' | 'tasks' | 'decisions' | 'insights' | 'team';

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Portal } from './Portal';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { Plus, LayoutGrid, Crosshair, FileCheck2, Radar, Users, RotateCcw, X, UserPlus, Trash2, ChevronRight } from 'lucide-react';
+import { Plus, LayoutGrid, Crosshair, FileCheck2, Radar, Users, Settings2, RotateCcw, X, Trash2, ChevronRight } from 'lucide-react';
 import { ViewTab } from '../types';
 
 /** Little 4-bar "signal strength" indicator used for online status. */
@@ -31,9 +31,7 @@ export const Sidebar: React.FC = () => {
     createChannel,
     resetToDemoData,
     mode,
-    createRecruitInvite,
     isChannelGuest,
-    addToast,
     deleteChannel,
     isProjectOwner,
     getChannelAdminId,
@@ -41,7 +39,6 @@ export const Sidebar: React.FC = () => {
   const isCloud = mode === 'cloud';
 
   const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
-  const [recruitingChannel, setRecruitingChannel] = useState<string | null>(null);
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelTopic, setNewChannelTopic] = useState('');
 
@@ -52,17 +49,6 @@ export const Sidebar: React.FC = () => {
     setNewChannelName('');
     setNewChannelTopic('');
     setIsChannelModalOpen(false);
-  };
-
-  const copyInvite = async (channelId?: string) => {
-    const inviteLink = await createRecruitInvite(channelId);
-    if (!inviteLink) return;
-    try {
-      await navigator.clipboard.writeText(inviteLink);
-      addToast({ type: 'success', title: 'Invite link copied', message: channelId ? 'Only this channel is included. The invite expires in 7 days.' : 'This invite grants full workspace access.' });
-    } catch {
-      addToast({ type: 'info', title: 'Invite link', message: inviteLink });
-    }
   };
 
   const navItems: { tab: ViewTab; label: string; icon: React.ElementType }[] = [
@@ -91,14 +77,6 @@ export const Sidebar: React.FC = () => {
           {project.name}
         </h2>
         {project.tagline && <p className="text-[11px] text-slate-500 truncate">{project.tagline}</p>}
-        <button
-          onClick={() => copyInvite()}
-          disabled={isChannelGuest}
-          className="mt-2.5 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-700 term text-[10px] uppercase tracking-wider text-slate-300 hover:border-emerald-500 hover:text-emerald-500 transition-colors cursor-pointer"
-        >
-          <UserPlus className="w-3.5 h-3.5" />
-          Recruit to workspace
-        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 py-4 space-y-5">
@@ -123,6 +101,11 @@ export const Sidebar: React.FC = () => {
           })}
         </div>
 
+        {(isProjectOwner || channels.some((channel) => getChannelAdminId(channel) === currentUser.id)) && (
+          <button onClick={() => setActiveTab('channel-settings')} className={`mx-3 mb-4 flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-xs font-semibold ${activeTab === 'channel-settings' ? 'border-emerald-500 text-emerald-400 bg-emerald-500/10' : 'border-slate-700 text-slate-300 hover:border-emerald-500'}`}>
+            <Settings2 size={15} aria-hidden="true" /> Channel management
+          </button>
+        )}
         {/* Channels */}
         <div>
           <div className="flex items-center justify-between pr-2">
@@ -139,7 +122,6 @@ export const Sidebar: React.FC = () => {
           <div className="space-y-0.5 mt-1">
             {channels.map((chan) => {
               const isSelected = activeChannelId === chan.id && activeTab === 'channels';
-              const canRecruit = getChannelAdminId(chan) === currentUser.id;
               const canDelete = isProjectOwner && channels.length > 1;
               return (
                 <div key={chan.id} className="relative group/chan">
@@ -165,25 +147,6 @@ export const Sidebar: React.FC = () => {
                       </span>
                     ) : null}
                   </button>
-                  {canRecruit && (
-                    <button
-                      type="button"
-                      disabled={recruitingChannel !== null}
-                      aria-label={`Recruit to #${chan.name}`}
-                      className="mb-1 ml-7 mt-1 flex items-center gap-1.5 rounded border border-slate-700 px-2 py-1 text-[10px] text-emerald-400 hover:border-emerald-500 disabled:opacity-50"
-                      onClick={async () => {
-                        setRecruitingChannel(chan.id);
-                        try {
-                          await copyInvite(chan.id);
-                        } finally {
-                          setRecruitingChannel(null);
-                        }
-                      }}
-                    >
-                      <UserPlus size={12} aria-hidden="true" />
-                      {recruitingChannel === chan.id ? 'Creating invite…' : 'Recruit to channel'}
-                    </button>
-                  )}
                   {canDelete && (
                     <button
                       onClick={() => {
