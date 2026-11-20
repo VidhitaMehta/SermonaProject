@@ -11,6 +11,8 @@ import {
   SuggestedTask,
   DetectedDecision,
   ViewTab,
+  Question,
+  MessageReply,
 } from '../types';
 import {
   SAMPLE_USERS,
@@ -62,6 +64,10 @@ export interface ToastNotification {
   type: 'success' | 'info' | 'warning' | 'error';
   title: string;
   message: string;
+  /** Optional button on the toast (e.g. "Open" a new message) */
+  action?: { label: string; run: () => void };
+  /** Toasts with the same key replace each other instead of stacking */
+  groupKey?: string;
 }
 
 export interface ProjectSummary {
@@ -114,7 +120,13 @@ interface WorkspaceContextType {
   addToast: (toast: Omit<ToastNotification, 'id'>) => void;
 
   // Actions
-  sendMessage: (content: string, codeSnippet?: { language: string; code: string }) => void;
+  sendMessage: (
+    content: string,
+    codeSnippet?: { language: string; code: string },
+    extras?: { mentions?: string[]; replyTo?: MessageReply }
+  ) => void;
+  /** New messages per channel that arrived while you were elsewhere (cloud mode) */
+  unreadCounts: Record<string, number>;
   addReaction: (messageId: string, emoji: string) => void;
   analyzeCurrentChannel: () => Promise<void>;
 
@@ -258,6 +270,95 @@ const loadStoredData = () => {
   return null;
 };
 
+// ---------- re-analysis merge (keeps the team's review work when analysis is run again) ----------
+
+type Matchable = { sourceMessageIds?: string[] };
+
+const normText = (s?: string | null) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+/** Same wording, or at least half of the shorter text's words in common. */
+const similarText = (a?: string | null, b?: string | null) => {
+  const na = normText(a);
+  const nb = normText(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  const A = new Set(na.split(' ').filter((w) => w.length > 2));
+  const B = new Set(nb.split(' ').filter((w) => w.length > 2));
+  if (A.size === 0 || B.size === 0) return false;
+  let common = 0;
+  A.forEach((w) => {
+    if (B.has(w)) common++;
+  });
+  return common / Math.min(A.size, B.size) >= 0.5;
+};
+
+const sharesSource = (a: Matchable, b: Matchable) =>
+  (a.sourceMessageIds || []).some((id) => (b.sourceMessageIds || []).includes(id));
+
+/** Two extracted items are "the same" if the text matches, or they cite the same message and read alike. */
+const sameItem = (a: Matchable, aText: string | undefined, b: Matchable, bText: string | undefined) =>
+  normText(aText) !== '' &&
+  (normText(aText) === normText(bText) || (sharesSource(a, b) && similarText(aText, bText)));
+
+/**
+ * New results win, except for items the team already worked on (keepOld):
+ * those keep their edits/status, and stay even if the new run didn't find them.
+ */
+function mergeList<T extends Matchable>(
+  oldList: T[],
+  newList: T[],
+  text: (x: T) => string | undefined,
+  keepOld: (x: T) => boolean
+): T[] {
+  const used = new Set<T>();
+  const result: T[] = [];
+  newList.forEach((n) => {
+    const old = oldList.find((o) => !used.has(o) && sameItem(o, text(o), n, text(n)));
+    if (old) used.add(old);
+    result.push(old && keepOld(old) ? old : n);
+  });
+  oldList.forEach((o) => {
+    if (!used.has(o) && keepOld(o)) result.push(o);
+  });
+  return result;
+}
+
+const mergeAnalysis = (
+  prev: AIAnalysisResult | null,
+  next: AIAnalysisResult,
+  boardTasks: Task[],
+  loggedDecisions: Decision[]
+): AIAnalysisResult => {
+  const dismissed = prev?.dismissedTasks || [];
+  const onBoard = (t: SuggestedTask) => boardTasks.some((b) => sameItem(b, b.title, t, t.title));
+  const isDismissed = (t: SuggestedTask) => dismissed.some((d) => sameItem(d, d.title, t, t.title));
+
+  const proposedTasks = mergeList(
+    prev?.proposedTasks || [],
+    next.proposedTasks.filter((t) => !onBoard(t) && !isDismissed(t)),
+    (t) => t.title,
+    (t) => Boolean(t.approved || t.edited)
+  ).filter((t) => !onBoard(t));
+
+  // A newly found decision that is already in the Decision Log takes the log's id + status
+  const withLog = next.decisions.map((d) => {
+    const logged = loggedDecisions.find((l) => sameItem(l, l.title, d, d.title));
+    if (!logged) return d;
+    const id = logged.decisionId || logged.id;
+    return { ...d, id, decisionId: id, title: logged.title, description: logged.description, status: logged.status, confirmedBy: logged.confirmedBy };
+  });
+  const decisions = mergeList(prev?.decisions || [], withLog, (d) => d.title, (d) => d.status !== 'proposed' || Boolean(d.edited));
+
+  const unresolvedQuestions = mergeList<Question>(
+    prev?.unresolvedQuestions || [],
+    next.unresolvedQuestions,
+    (q) => q.question,
+    (q) => q.status !== 'unresolved' || Boolean(q.ownerId)
+  );
+
+  return { ...next, proposedTasks, decisions, unresolvedQuestions, dismissedTasks: dismissed };
+};
+
 export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const initialStored = useMemo(loadStoredData, []);
 
@@ -284,11 +385,32 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [activeTab, setActiveTab] = useState<ViewTab>('dashboard');
     const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
-  const jumpToMessage = (messageId: string, channelId?: string) => {
-    const targetChannel =
-      channelId ||
-      Object.keys(messages).find((ch) => (messages[ch] || []).some((m) => m.id === messageId));
-    if (!targetChannel) return; // message deleted or not found: do nothing
+  /** Which channel holds this message? Checks loaded messages first, then asks Firestore. */
+  const findMessageChannel = async (messageId: string): Promise<string | null> => {
+    const loaded = Object.keys(messages).find((ch) => (messages[ch] || []).some((m) => m.id === messageId));
+    if (loaded) return loaded;
+    if (!IS_CLOUD || !db || !cloudProjectId) return null;
+    // Message doc id == message id, so one cheap lookup per channel finds it
+    const hits = await Promise.all(
+      channels.map(async (ch) => {
+        try {
+          const snap = await getDoc(doc(db!, 'projects', cloudProjectId, 'channels', ch.id, 'messages', messageId));
+          return snap.exists() ? ch.id : null;
+        } catch {
+          return null; // e.g. a channel this user can't read
+        }
+      })
+    );
+    return hits.find((id): id is string => Boolean(id)) || null;
+  };
+
+  const jumpToMessage = async (messageId: string, channelId?: string) => {
+    const known = channelId && channels.some((c) => c.id === channelId) ? channelId : null;
+    const targetChannel = known || (await findMessageChannel(messageId));
+    if (!targetChannel) {
+      addToast({ type: 'warning', title: 'Message not found', message: 'The source message may have been deleted.' });
+      return;
+    }
     setSearchQuery(''); // an active search could hide the message
     setActiveChannelId(targetChannel);
     setActiveTab('channels');
@@ -335,10 +457,13 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   // ---------- toasts ----------
   const addToast = (toast: Omit<ToastNotification, 'id'>) => {
     const id = `toast_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    setToasts((prev) => [...prev, { ...toast, id }]);
+    setToasts((prev) => [
+      ...prev.filter((t) => !toast.groupKey || t.groupKey !== toast.groupKey).slice(-4),
+      { ...toast, id },
+    ]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4500);
+    }, toast.action ? 7000 : 4500);
   };
 
   const dismissToast = (id: string) => {
@@ -508,13 +633,13 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
           window.history.replaceState({}, '', window.location.pathname);
         }
         if (!chosen && invited && (await ensureMembership(invited, authUser.uid))) {
-          chosen = invited;
-          addToast({ type: 'success', title: 'Joined project', message: 'You were added to the shared workspace.' });
+          chosen = invited; // ?project= links only open workspaces you already belong to
+          addToast({ type: 'success', title: 'Workspace opened', message: 'Switched to the shared workspace.' });
         } else if (!chosen && invited) {
           addToast({
             type: 'warning',
             title: 'Invite link not valid',
-            message: 'That project could not be found or joined.',
+            message: 'That link only works for existing members. Ask for a fresh invite link.',
           });
         }
         if (invited) {
@@ -706,6 +831,89 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudProjectId, activeChannelId, activeChannelAvailable]);
 
+  // ---------- cloud: pop-up notifications + unread counts for every channel ----------
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  // Listener callbacks are created once, so they read the latest values from this ref
+  const liveRef = useRef({ activeChannelId, activeTab, uid: '', channels, jump: (_id: string, _ch?: string) => {} });
+  liveRef.current = {
+    activeChannelId,
+    activeTab,
+    uid: authUser?.uid || '',
+    channels,
+    jump: (id: string, ch?: string) => void jumpToMessage(id, ch),
+  };
+
+  const notifyNewMessage = (channelId: string, msg: Message) => {
+    const live = liveRef.current;
+    if (!msg || msg.senderId === live.uid) return; // never notify about your own messages
+    const looking =
+      channelId === live.activeChannelId && live.activeTab === 'channels' && document.visibilityState === 'visible';
+    if (looking) return;
+
+    setUnreadCounts((prev) => ({ ...prev, [channelId]: (prev[channelId] || 0) + 1 }));
+    const channelName = live.channels.find((c) => c.id === channelId)?.name || 'channel';
+    const mentioned = (msg.mentions || []).includes(live.uid);
+    const preview = (msg.content || (msg.codeSnippet ? 'shared a code snippet' : '')).slice(0, 120);
+    const title = mentioned ? `${msg.senderName} mentioned you in #${channelName}` : `New message in #${channelName}`;
+    const open = () => live.jump(msg.id, channelId);
+
+    addToast({
+      type: mentioned ? 'warning' : 'info',
+      title,
+      message: `${msg.senderName}: ${preview}`,
+      action: { label: 'Open', run: open },
+      groupKey: mentioned ? undefined : `chan_${channelId}`, // one toast per channel, newest wins
+    });
+
+    // System notification when the Sermona tab is in the background
+    if (document.visibilityState !== 'visible' && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        const n = new Notification(title, { body: `${msg.senderName}: ${preview}`, tag: `sermona_${channelId}` });
+        n.onclick = () => {
+          window.focus();
+          open();
+          n.close();
+        };
+      } catch {
+        /* some browsers only allow notifications from a service worker */
+      }
+    }
+  };
+
+  const channelKey = channels.map((c) => c.id).join(',');
+  useEffect(() => {
+    if (!IS_CLOUD || !db || !cloudProjectId || !authUser || !channelKey) return;
+    const since = new Date().toISOString(); // only messages sent from now on
+    const unsubs = channelKey.split(',').map((chId) =>
+      onSnapshot(
+        query(collection(db!, `projects/${cloudProjectId}/channels/${chId}/messages`), where('timestamp', '>', since)),
+        (snap) =>
+          snap.docChanges().forEach((change) => {
+            if (change.type === 'added') notifyNewMessage(chId, change.doc.data() as Message);
+          }),
+        (err) => console.warn('Notification listener:', err)
+      )
+    );
+    return () => unsubs.forEach((u) => u());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloudProjectId, authUser, channelKey]);
+
+  // Opening a channel clears its unread count
+  useEffect(() => {
+    if (activeTab !== 'channels' || !activeChannelId) return;
+    setUnreadCounts((prev) => (prev[activeChannelId] ? { ...prev, [activeChannelId]: 0 } : prev));
+  }, [activeChannelId, activeTab]);
+
+  // Ask for browser notification permission on the first click (browsers block asking without one)
+  useEffect(() => {
+    if (!IS_CLOUD || !('Notification' in window) || Notification.permission !== 'default') return;
+    const ask = () => {
+      Notification.requestPermission().catch(() => {});
+    };
+    window.addEventListener('pointerdown', ask, { once: true });
+    return () => window.removeEventListener('pointerdown', ask);
+  }, []);
+
   // Online state derived from lastSeen (cloud) — recomputed on every heartbeat tick
   const teamMembersWithPresence: User[] = IS_CLOUD
     ? teamMembers.map((m) => ({
@@ -815,9 +1023,9 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     const ok = await ensureMembership(id, authUser.uid);
     if (ok) {
       switchProject(id);
-      addToast({ type: 'success', title: 'Joined workspace', message: 'Welcome! You can now chat in its channels.' });
+      addToast({ type: 'success', title: 'Workspace opened', message: 'Switched to the shared workspace.' });
     } else {
-      addToast({ type: 'error', title: 'Could not join', message: 'That workspace was not found, or the link is wrong.' });
+      addToast({ type: 'error', title: 'Could not join', message: 'You are not a member yet. Ask for an invite link (it contains ?invite=).' });
     }
     return ok;
   };
@@ -862,7 +1070,11 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   // ---------- messaging ----------
-  const sendMessage = (content: string, codeSnippet?: { language: string; code: string }) => {
+  const sendMessage = (
+    content: string,
+    codeSnippet?: { language: string; code: string },
+    extras?: { mentions?: string[]; replyTo?: MessageReply }
+  ) => {
     if (!content.trim() && !codeSnippet) return;
     if (!activeChannelId) return;
 
@@ -877,6 +1089,8 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       content: content.trim(),
       timestamp: new Date().toISOString(),
       ...(codeSnippet ? { codeSnippet } : {}),
+      ...(extras?.mentions && extras.mentions.length > 0 ? { mentions: extras.mentions } : {}),
+      ...(extras?.replyTo ? { replyTo: extras.replyTo } : {}),
       reactions: {},
     };
 
@@ -945,6 +1159,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             senderId: m.senderId,
             senderName: m.senderName,
             senderRole: m.senderRole,
+            replyToId: m.replyTo?.messageId || null,
             content: m.content,
             timestamp: m.timestamp,
           })),
@@ -964,7 +1179,26 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         throw new Error(errData.error || `Server responded with ${response.status}`);
       }
 
-      const data: AIAnalysisResult = await response.json();
+      const raw: AIAnalysisResult = await response.json();
+      // Give every extracted item an id that is unique across channels and re-runs.
+      // Gemini / basic mode reuse ids like "dec_1" or "dec_basic_0_0", which made
+      // confirming a decision in one channel overwrite a decision from another.
+      const fresh: AIAnalysisResult = {
+        ...raw,
+        tasks: undefined,
+        decisions: (raw.decisions || []).map((d) => {
+          const id = newId('dec');
+          return { ...d, id, decisionId: id };
+        }),
+        proposedTasks: (raw.proposedTasks || []).map((t) => {
+          const id = newId('task');
+          return { ...t, id, taskId: id };
+        }),
+        unresolvedQuestions: (raw.unresolvedQuestions || []).map((q) => ({ ...q, id: newId('q') })),
+        ideas: (raw.ideas || []).map((i) => ({ ...i, id: newId('idea') })),
+      };
+      // Keep what the team already reviewed (edits, ticks, confirmations, owners, rejections)
+      const data = mergeAnalysis(analyses[channelId] || null, fresh, tasks, decisions);
       setAnalysisFor(channelId, { ...data, channelId });
 
       addToast({
@@ -987,7 +1221,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   // --- PROPOSED TASKS REVIEW WORKFLOW (Approve, Edit, Reject) ---
 
-  const buildTaskFromSuggestion = (t: SuggestedTask): Task => {
+  const buildTaskFromSuggestion = (t: SuggestedTask, channelId: string): Task => {
     const assignedMember = teamMembers.find(
       (m) =>
         m.id === t.assigneeId ||
@@ -1014,6 +1248,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       updatedAt: now,
       tags: ['AI-Validated'],
       recommendedSkills: t.recommendedSkills || [],
+      channelId,
     };
   };
 
@@ -1022,7 +1257,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     const task = currentAnalysis.proposedTasks.find((t) => (t.taskId || t.id) === taskId);
     if (!task) return;
 
-    const newTask = buildTaskFromSuggestion(task);
+    const newTask = buildTaskFromSuggestion(task, currentAnalysis.channelId || activeChannelId);
     setTasks((prev) => [newTask, ...prev]);
     syncToFirestore(`projects/${cloudProjectId}/tasks`, newTask.id, newTask);
 
@@ -1040,9 +1275,15 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   const rejectProposedTask = (taskId: string) => {
     if (!currentAnalysis) return;
+    const rejected = currentAnalysis.proposedTasks.find((t) => (t.taskId || t.id) === taskId);
     setCurrentAnalysis({
       ...currentAnalysis,
       proposedTasks: currentAnalysis.proposedTasks.filter((t) => (t.taskId || t.id) !== taskId),
+      // Remember it so re-running analysis doesn't propose it again
+      dismissedTasks: [
+        ...(currentAnalysis.dismissedTasks || []),
+        ...(rejected ? [{ title: rejected.title, sourceMessageIds: rejected.sourceMessageIds || [] }] : []),
+      ].slice(-200),
     });
     addToast({ type: 'info', title: 'Task Rejected', message: 'Proposed task dismissed.' });
   };
@@ -1052,7 +1293,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     setCurrentAnalysis({
       ...currentAnalysis,
       proposedTasks: currentAnalysis.proposedTasks.map((t) =>
-        (t.taskId || t.id) === taskId ? { ...t, ...updates } : t
+        (t.taskId || t.id) === taskId ? { ...t, ...updates, edited: true } : t
       ),
     });
   };
@@ -1079,7 +1320,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       return;
     }
 
-    const newTasks = approvedList.map(buildTaskFromSuggestion);
+    const newTasks = approvedList.map((t) => buildTaskFromSuggestion(t, currentAnalysis.channelId || activeChannelId));
     setTasks((prev) => [...newTasks, ...prev]);
     newTasks.forEach((t) => syncToFirestore(`projects/${cloudProjectId}/tasks`, t.id, t));
 
@@ -1153,7 +1394,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       setCurrentAnalysis({
         ...currentAnalysis,
         decisions: currentAnalysis.decisions.map((d) =>
-          (d.decisionId || d.id) === decisionId ? { ...d, ...updates } : d
+          (d.decisionId || d.id) === decisionId ? { ...d, ...updates, edited: true } : d
         ),
       });
     }
@@ -1239,6 +1480,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       updatedAt: now,
       tags: taskData.tags || ['Engineering'],
       recommendedSkills: taskData.recommendedSkills || [],
+      channelId: taskData.channelId,
     };
 
     setTasks((prev) => [newTask, ...prev]);
@@ -1575,6 +1817,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         dismissToast,
         addToast,
         sendMessage,
+        unreadCounts,
         addReaction,
         analyzeCurrentChannel,
         approveProposedTask,

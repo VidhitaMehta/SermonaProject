@@ -61,6 +61,17 @@ export interface Message {
     language: string;
     code: string;
   };
+  /** User ids tagged with @ in this message */
+  mentions?: string[];
+  /** Set when this message is a reply to an earlier one */
+  replyTo?: MessageReply;
+}
+
+export interface MessageReply {
+  messageId: string;
+  senderId: string;
+  senderName: string;
+  snippet: string;
 }
 
 export interface Decision {
@@ -103,6 +114,7 @@ export interface Task {
   tags?: string[];
   recommendedSkills?: string[];
   projectId?: string;
+  channelId?: string;
 }
 
 export interface Question {
@@ -153,6 +165,7 @@ export interface SuggestedTask {
   rejected?: boolean;
   sourceMessageIds: string[];
   recommendedSkills?: string[];
+  edited?: boolean;
 }
 
 export interface DetectedDecision {
@@ -166,6 +179,7 @@ export interface DetectedDecision {
   confirmationRequirements?: string | null;
   sourceMessageIds: string[];
   confirmedBy?: string;
+  edited?: boolean;
 }
 
 export interface TeamInsights {
@@ -194,6 +208,8 @@ export interface AIAnalysisResult {
   ideas: Idea[];
   insights: AIInsight[];
   teamInsights?: TeamInsights;
+  /** Tasks the team rejected, so a re-run doesn't propose them again */
+  dismissedTasks?: { title: string; sourceMessageIds: string[] }[];
 }
 
 export type ViewTab = 'channel-settings' | 'channels' | 'dashboard' | 'tasks' | 'decisions' | 'insights' | 'team';

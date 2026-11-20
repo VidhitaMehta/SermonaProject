@@ -295,7 +295,8 @@ app.post('/api/analyze-conversation', async (req, res) => {
         const senderId = m.senderId ? ` [senderId: "${m.senderId}"]` : '';
         const role = m.senderRole ? ` (${m.senderRole})` : '';
         const text = m.content || '';
-        return `[Msg ID: "${id}"]${senderId} ${sender}${role}: ${text}`;
+        const reply = m.replyToId ? ` (reply to Msg ID "${m.replyToId}")` : '';
+        return `[Msg ID: "${id}"]${senderId} ${sender}${role}${reply}: ${text}`;
       })
       .join('\n\n');
 
@@ -328,7 +329,10 @@ CRITICAL EXTRACTION RULES:
 6. Questions vs Commitments: Distinguish explicitly asked questions from inferred gaps. Set category to "explicitly_asked" or "inferred_gap".
 7. Team Insights: Provide cautious, data-grounded observations on workload distribution and collaboration gaps.
 8. Skills: For every proposed task, list 1-4 short recommendedSkills needed to do it (e.g. "Python", "Figma", "Data Cleaning"). Prefer the exact skill names used in the member roster when they fit. Do NOT use skills to pick an assignee — assignment rules above still apply.
-9. Ideas: Capture suggestions and brainstormed ideas that are not yet decisions or tasks in "ideas", with who proposed them.`;
+9. Ideas: Capture suggestions and brainstormed ideas that are not yet decisions or tasks in "ideas", with who proposed them.
+10. Language: Messages may be in English, Hindi, or Hinglish (Hindi written in Roman script mixed with English, e.g. "main kal tak API bana dunga", "ye final hai, Postgres hi use karenge", "kisne login page dekha?"). Understand all of them equally well. Common cues: "kar dunga/karungi/dekh lunga" = a commitment (task), "kar do/bhej dena/dekh lo" = a request (task), "final hai/decide kiya/tay hua/pakka" = a decision, "kya/kaun/kab/kaise/kyun" = a question (even without a "?"), "kal" = tomorrow, "parso" = day after tomorrow, "tak" = by, "baje" = o'clock, "shaam" = evening, "raat" = night.
+11. Output language: Write titles, descriptions, summary, questions and insights in clear English. Keep evidenceSnippet exactly as written in the original message (do not translate it).
+12. Mentions & replies: "@Name" tags the person being addressed; use it to resolve the assignee when it is unambiguous. A line marked "(reply to Msg ID ...)" answers that earlier message, so use it to tell which questions got answered.`;
 
         const prompt = `Analyze this project conversation from channel #${channelName || 'channel'} in project ${projectId || 'default'}.
 

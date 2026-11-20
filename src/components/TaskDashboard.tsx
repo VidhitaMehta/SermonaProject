@@ -441,7 +441,7 @@ export const TaskDashboard: React.FC = () => {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  jumpToMessage(task.sourceMessageIds[0]);
+                                  jumpToMessage(task.sourceMessageIds[0], task.channelId);
                                 }}
                                 className="px-1.5 py-0.2 rounded text-[8px] font-mono bg-slate-950 text-slate-400 border border-slate-800 hover:border-emerald-400 hover:text-emerald-400 cursor-pointer"
                                 title={`Jump to ${task.sourceMessageIds[0]}`}
