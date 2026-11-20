@@ -71,9 +71,9 @@ export const WorkspaceModal: React.FC<Props> = ({ isOpen, onClose, initialTab = 
           <button onClick={onClose} className="absolute top-5 right-5 text-slate-500 hover:text-slate-100 cursor-pointer">
             <X className="w-5 h-5" />
           </button>
-          <h3 className="text-lg font-bold text-slate-100">Add a workspace</h3>
+          <h3 className="text-lg font-bold text-slate-100">Join or create a workspace</h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Workspaces are like Discord servers or WhatsApp groups — each has its own channels and members.
+            Workspace invites grant full access. Channel invites grant access only to the invited channel.
           </p>
 
           <div className="mt-4 grid grid-cols-2 p-1 rounded-xl bg-slate-950 text-xs font-semibold">

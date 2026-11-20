@@ -15,8 +15,9 @@ import { ToastContainer } from './components/ToastContainer';
 import { AuthGate } from './components/AuthGate';
 
 const MainLayout: React.FC = () => {
-  const { activeTab, mode, channels, activeChannelId } = useWorkspace();
-  const theme = activeTab === 'channels' ? getChannelTheme(channels.find((channel) => channel.id === activeChannelId)?.theme) : null;
+  const { activeTab, mode, channels, activeChannelId, isChannelGuest } = useWorkspace();
+  const shownTab = isChannelGuest ? 'channels' : activeTab;
+  const theme = shownTab === 'channels' ? getChannelTheme(channels.find((channel) => channel.id === activeChannelId)?.theme) : null;
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden text-slate-100 font-sans">
@@ -31,10 +32,10 @@ const MainLayout: React.FC = () => {
 
         {/* 3. Main area */}
         <main key={activeTab} data-channel-theme={theme?.id} className="workspace-main glass flex-1 flex overflow-hidden rounded-2xl animate-fade-up">
-          {activeTab === 'channels' ? (
+          {shownTab === 'channels' ? (
             <>
               <ChatWorkspace />
-              <AIPanel />
+              {!isChannelGuest && <AIPanel />}
             </>
           ) : activeTab === 'tasks' ? (
             <TaskDashboard />

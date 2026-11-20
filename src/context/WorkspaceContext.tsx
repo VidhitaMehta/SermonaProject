@@ -79,6 +79,8 @@ interface WorkspaceContextType {
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
   inviteLink: string | null;
+  isChannelGuest: boolean;
+  createRecruitInvite: (channelId?: string) => Promise<string | null>;
   myProjects: ProjectSummary[];
   switchProject: (projectId: string) => void;
   joinProject: (inviteLinkOrId: string) => Promise<boolean>;
@@ -266,6 +268,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [localUserId, setLocalUserId] = useState<string>(initialStored?.localUserId || CURRENT_USER.id);
   const [project, setProject] = useState<Project>(IS_CLOUD ? EMPTY_PROJECT : initialStored?.project || SAMPLE_PROJECT);
   const [channels, setChannels] = useState<Channel[]>(IS_CLOUD ? [] : initialStored?.channels || SAMPLE_CHANNELS);
+  const pendingInviteChannel = useRef<string | null>(null);
   const [activeChannelId, setActiveChannelId] = useState<string>(
     IS_CLOUD ? '' : initialStored?.activeChannelId || SAMPLE_CHANNELS[0].id
   );
@@ -316,10 +319,13 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   }, [authUser, teamMembers, localUserId]);
 
   const currentAnalysis = analyses[activeChannelId] || null;
+  const activeChannelAvailable = channels.some((channel) => channel.id === activeChannelId);
 
   const workspaceReady = IS_CLOUD
     ? Boolean(authUser && cloudProjectId && projectLoaded && channelsLoaded)
     : true;
+
+  const isChannelGuest = IS_CLOUD && Boolean(authUser && project.ownerId !== authUser.uid && !project.members.includes(authUser.uid));
 
   const inviteLink =
     IS_CLOUD && cloudProjectId
@@ -422,21 +428,63 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     return pid;
   };
 
-  /** True if the user can read the project, joining it first if needed (the project id acts as the invite token). */
-  const ensureMembership = async (projectId: string, uid: string): Promise<boolean> => {
+  const ensureMembership = async (projectId: string, _uid: string): Promise<boolean> => {
     if (!/^[a-zA-Z0-9_-]+$/.test(projectId)) return false;
-    const ref = doc(db!, 'projects', projectId);
     try {
-      const snap = await getDoc(ref);
-      return snap.exists();
-    } catch {
-      // Not a member yet (permission denied) → try to join
-    }
-    try {
-      await updateDoc(ref, { members: arrayUnion(uid) });
-      return true;
+      return (await getDoc(doc(db!, 'projects', projectId))).exists();
     } catch {
       return false;
+    }
+  };
+
+  const acceptRecruitInvite = async (token: string, uid: string): Promise<string | null> => {
+    if (!db || !/^[a-zA-Z0-9_-]{3,128}$/.test(token)) return null;
+    const invitation = await getDoc(doc(db, 'recruitInvites', token));
+    if (!invitation.exists()) return null;
+    const invite = invitation.data();
+    if (invite.expiresAt <= Date.now()) return null;
+    const ref = doc(db, 'projects', invite.projectId);
+    let fullMember = false;
+    try {
+      const snapshot = await getDoc(ref);
+      fullMember = snapshot.exists() && (snapshot.data().members.includes(uid) || snapshot.data().ownerId === uid);
+    } catch { /* New invitees cannot read the workspace until the batch commits. */ }
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'projects', invite.projectId, 'joinRequests', uid), { token });
+    if (invite.scope === 'workspace') {
+      batch.update(ref, { members: arrayUnion(uid), guests: arrayRemove(uid) });
+    } else {
+      if (!fullMember) batch.update(ref, { guests: arrayUnion(uid) });
+      batch.update(doc(db, 'projects', invite.projectId, 'channels', invite.channelId), {
+        members: arrayUnion(uid),
+      });
+    }
+    await batch.commit();
+    if (invite.scope === 'channel') {
+      pendingInviteChannel.current = invite.channelId;
+      setActiveChannelId(invite.channelId);
+    }
+    return invite.projectId;
+  };
+
+  const createRecruitInvite = async (channelId?: string): Promise<string | null> => {
+    if (!IS_CLOUD || !db || !cloudProjectId || !authUser) {
+      addToast({ type: 'info', title: 'Firebase required', message: 'Recruit links need a connected workspace.' });
+      return null;
+    }
+    const channel = channels.find((entry) => entry.id === channelId);
+    if (channelId ? !channel || getChannelAdminId(channel) !== authUser.uid : isChannelGuest) return null;
+    try {
+      const ref = doc(collection(db, 'recruitInvites'));
+      await setDoc(ref, {
+        projectId: cloudProjectId, channelId: channelId || null,
+        scope: channelId ? 'channel' : 'workspace', createdBy: authUser.uid,
+        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      });
+      return `${window.location.origin}${window.location.pathname}?invite=${ref.id}`;
+    } catch (error) {
+      reportCloudError('create invite')(error);
+      return null;
     }
   };
 
@@ -447,14 +495,22 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     (async () => {
       try {
         const params = new URLSearchParams(window.location.search);
+        const inviteToken = params.get('invite');
         const invited = params.get('project');
         const remembered = safeLocalGet(LAST_PROJECT_KEY) || safeLocalGet(OLD_LAST_PROJECT_KEY);
 
         let chosen: string | null = null;
-        if (invited && (await ensureMembership(invited, authUser.uid))) {
+        if (inviteToken) {
+          chosen = await acceptRecruitInvite(inviteToken, authUser.uid);
+          if (!chosen) addToast({ type: 'warning', title: 'Invite unavailable', message: 'Ask the recruiter for a fresh link.' });
+          else setActiveTab('channels');
+          params.delete('invite');
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+        if (!chosen && invited && (await ensureMembership(invited, authUser.uid))) {
           chosen = invited;
           addToast({ type: 'success', title: 'Joined project', message: 'You were added to the shared workspace.' });
-        } else if (invited) {
+        } else if (!chosen && invited) {
           addToast({
             type: 'warning',
             title: 'Invite link not valid',
@@ -475,6 +531,10 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             query(collection(db!, 'projects'), where('members', 'array-contains', authUser.uid), limit(1))
           );
           if (!snap.empty) chosen = snap.docs[0].id;
+          if (!chosen) {
+            const guestProjects = await getDocs(query(collection(db!, 'projects'), where('guests', 'array-contains', authUser.uid), limit(1)));
+            if (!guestProjects.empty) chosen = guestProjects.docs[0].id;
+          }
         }
         if (!chosen) {
           chosen = await createCloudProject(authUser, 'My First Project', 'Talk → Organize → Execute', '', null);
@@ -491,21 +551,19 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authUser]);
 
-  // ---------- cloud: list my projects (for the workspace switcher) ----------
+  // Workspace members and channel guests can both return to their workspaces.
   useEffect(() => {
     if (!IS_CLOUD || !db || !authUser) return;
-    return onSnapshot(
-      query(collection(db, 'projects'), where('members', 'array-contains', authUser.uid)),
-      (snap) =>
-        setMyProjects(
-          snap.docs
-            .map((d) => d.data() as Project)
-            .sort(byCreatedDesc)
-            .map((p) => ({ id: p.id, name: p.name, tagline: p.tagline }))
-        ),
-      reportCloudError('project list')
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const groups: Record<string, Project[]> = { members: [], guests: [] };
+    const unsubscribers = ['members', 'guests'].map((field) => onSnapshot(
+      query(collection(db!, 'projects'), where(field, 'array-contains', authUser.uid)),
+      (snapshot) => {
+        groups[field] = snapshot.docs.map((entry) => entry.data() as Project);
+        const projects = new Map([...groups.members, ...groups.guests].map((entry) => [entry.id, entry]));
+        setMyProjects([...projects.values()].sort(byCreatedDesc).map((entry) => ({ id: entry.id, name: entry.name, tagline: entry.tagline })));
+      }, reportCloudError('project list')
+    ));
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   }, [authUser]);
 
   // ---------- cloud: my member profile + presence heartbeat ----------
@@ -561,24 +619,9 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         },
         reportCloudError('project')
       ),
-      onSnapshot(
-        collection(db, `projects/${pid}/channels`),
-        (snap) => {
-          setChannels(snap.docs.map((d) => d.data() as Channel).sort(byCreatedAsc));
-          setChannelsLoaded(true);
-        },
-        reportCloudError('channels')
-      ),
-      onSnapshot(
-        collection(db, `projects/${pid}/tasks`),
-        (snap) => setTasks(snap.docs.map((d) => d.data() as Task).sort(byCreatedDesc)),
-        reportCloudError('tasks')
-      ),
-      onSnapshot(
-        collection(db, `projects/${pid}/decisions`),
-        (snap) => setDecisions(snap.docs.map((d) => d.data() as Decision).sort(byCreatedDesc)),
-        reportCloudError('decisions')
-      ),
+
+
+
       onSnapshot(
         collection(db, `projects/${pid}/members`),
         // Hide anyone whose email is not from an allowed domain (e.g. accounts that
@@ -591,16 +634,52 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudProjectId]);
 
+  useEffect(() => {
+    if (!IS_CLOUD || !db || !authUser || !cloudProjectId || !projectLoaded || project.id !== cloudProjectId) return;
+    const pid = cloudProjectId;
+    setChannelsLoaded(false);
+    setChannels([]);
+    setMessages({});
+    setAnalyses({});
+    setTasks([]);
+    setDecisions([]);
+    if (isChannelGuest) setActiveTab('channels');
+    const source = collection(db, 'projects', pid, 'channels');
+    const unsubscribers = [onSnapshot(
+      isChannelGuest ? query(source, where('members', 'array-contains', authUser.uid)) : source,
+      (snapshot) => {
+        setChannels(snapshot.docs.map((entry) => entry.data() as Channel).sort(byCreatedAsc));
+        setChannelsLoaded(true);
+      }, reportCloudError('channels')
+    )];
+    if (!isChannelGuest) {
+      unsubscribers.push(onSnapshot(collection(db, 'projects', pid, 'tasks'),
+        (snapshot) => setTasks(snapshot.docs.map((entry) => entry.data() as Task).sort(byCreatedDesc)), reportCloudError('tasks')));
+      unsubscribers.push(onSnapshot(collection(db, 'projects', pid, 'decisions'),
+        (snapshot) => setDecisions(snapshot.docs.map((entry) => entry.data() as Decision).sort(byCreatedDesc)), reportCloudError('decisions')));
+    }
+    return () => {
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+      setMessages({});
+      setAnalyses({});
+    };
+  }, [cloudProjectId, projectLoaded, project.id, isChannelGuest, authUser]);
+
   // Keep the active channel valid as channels load/change
   useEffect(() => {
-    if (channels.length > 0 && !channels.some((c) => c.id === activeChannelId)) {
+    const invited = pendingInviteChannel.current;
+    if (invited && channels.some((channel) => channel.id === invited)) {
+      pendingInviteChannel.current = null;
+      setActiveChannelId(invited);
+      setActiveTab('channels');
+    } else if (channels.length > 0 && !channels.some((c) => c.id === activeChannelId)) {
       setActiveChannelId(channels[0].id);
     }
   }, [channels, activeChannelId]);
 
   // ---------- cloud: live messages + analysis for the active channel ----------
   useEffect(() => {
-    if (!IS_CLOUD || !db || !cloudProjectId || !activeChannelId) return;
+    if (!IS_CLOUD || !db || !cloudProjectId || !activeChannelId || !activeChannelAvailable) return;
     const pid = cloudProjectId;
     const ch = activeChannelId;
 
@@ -625,7 +704,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       unsubAnalysis();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cloudProjectId, activeChannelId]);
+  }, [cloudProjectId, activeChannelId, activeChannelAvailable]);
 
   // Online state derived from lastSeen (cloud) — recomputed on every heartbeat tick
   const teamMembersWithPresence: User[] = IS_CLOUD
@@ -694,7 +773,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     setDecisions([]);
     setChannels([]);
     setTeamMembers([]);
-    setActiveChannelId('');
+    setActiveChannelId(pendingInviteChannel.current || '');
     setCloudProjectId(projectId);
   };
 
@@ -709,6 +788,20 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       return false;
     }
     const raw = inviteLinkOrId.trim();
+    const token = raw.match(/[?&]invite=([A-Za-z0-9_-]+)/)?.[1];
+    if (token) {
+      try {
+        const pid = await acceptRecruitInvite(token, authUser.uid);
+        if (!pid) throw new Error('Expired invite');
+        switchProject(pid);
+        setActiveTab('channels');
+        addToast({ type: 'success', title: 'Invite accepted', message: 'Your invited channels are now available.' });
+        return true;
+      } catch {
+        addToast({ type: 'error', title: 'Could not join', message: 'Ask for a fresh invite link and try again.' });
+        return false;
+      }
+    }
     const fromLink = raw.match(/[?&]project=([A-Za-z0-9_-]+)/);
     const id = fromLink ? fromLink[1] : raw;
     if (!/^[A-Za-z0-9_-]{3,128}$/.test(id)) {
@@ -1321,7 +1414,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     if (IS_CLOUD && db && cloudProjectId) {
       try {
         // Take them off the project's member list (this is what grants access) …
-        await updateDoc(doc(db, 'projects', cloudProjectId), { members: arrayRemove(memberId) });
+        await updateDoc(doc(db, 'projects', cloudProjectId), { members: arrayRemove(memberId), guests: arrayRemove(memberId) });
         // … and delete their profile in this workspace
         await deleteDoc(doc(db, `projects/${cloudProjectId}/members`, memberId));
       } catch (err) {
@@ -1351,12 +1444,14 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   const createChannel = (name: string, topic: string) => {
+    if (isChannelGuest) return;
     const cleanName = name.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
     const newChannel: Channel = {
       id: newId('chan'),
       projectId: projectPath() || project.id,
       name: cleanName,
       adminId: currentUser.id,
+      members: [currentUser.id],
       topic: topic || 'New discussion topic',
       description: topic || 'New discussion topic',
       unreadCount: 0,
@@ -1447,6 +1542,8 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         signInWithGoogle,
         signOutUser,
         inviteLink,
+        isChannelGuest,
+        createRecruitInvite,
         myProjects,
         switchProject,
         joinProject,

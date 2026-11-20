@@ -24,6 +24,7 @@ export interface Project {
   description: string;
   ownerId?: string;
   members: string[];
+  guests?: string[];
   createdAt: string;
   deadline?: string;
   tags?: string[];

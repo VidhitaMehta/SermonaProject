@@ -27,7 +27,7 @@ service cloud.firestore {
       return resource.data;
     }
 
-    function isProjectMember(projectId) {
+    function isFullMember(projectId) {
       return isSignedIn() && (
         exists(/databases/$(database)/documents/projects/$(projectId)) &&
         (
@@ -35,6 +35,40 @@ service cloud.firestore {
           request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.members
         )
       );
+    }
+
+    function isProjectMember(projectId) {
+      return isFullMember(projectId) || (isSignedIn() &&
+        request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.get('guests', []));
+    }
+
+    function canReadChannel(projectId, channelId) {
+      return isFullMember(projectId) || (isProjectMember(projectId) &&
+        request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)/channels/$(channelId)).data.get('members', []));
+    }
+
+    function isChannelRecruiter(projectId, channelId) {
+      let project = get(/databases/$(database)/documents/projects/$(projectId)).data;
+      let channel = get(/databases/$(database)/documents/projects/$(projectId)/channels/$(channelId)).data;
+      let adminId = channel.get('adminId', '');
+      let assigned = adminId == project.ownerId || adminId in project.members || adminId in project.get('guests', []);
+      return request.auth.uid == (assigned ? adminId : project.ownerId);
+    }
+
+    function validInvitation(projectId) {
+      let token = getAfter(/databases/$(database)/documents/projects/$(projectId)/joinRequests/$(request.auth.uid)).data.token;
+      let invite = get(/databases/$(database)/documents/recruitInvites/$(token)).data;
+      return invite.projectId == projectId && invite.expiresAt > request.time.toMillis();
+    }
+
+    function invitationScope(projectId) {
+      let token = getAfter(/databases/$(database)/documents/projects/$(projectId)/joinRequests/$(request.auth.uid)).data.token;
+      return get(/databases/$(database)/documents/recruitInvites/$(token)).data;
+    }
+
+    function addsSelf(before, after) {
+      return after is list && after.toSet() == before.toSet().union([request.auth.uid].toSet()) &&
+        after.size() >= before.size() && after.size() <= before.size() + 1;
     }
 
     function isProjectOwner(projectId) {
@@ -67,12 +101,17 @@ service cloud.firestore {
 
     // A signed-in user who knows the project id (shared via invite link) may add
     // exactly themselves to `members` - and change nothing else.
-    function isSelfJoin() {
-      return !(request.auth.uid in existing().members) &&
-             incoming().diff(existing()).affectedKeys().hasOnly(['members']) &&
-             incoming().members.size() == existing().members.size() + 1 &&
-             incoming().members.hasAll(existing().members) &&
-             request.auth.uid in incoming().members;
+    function isSelfJoin(projectId) {
+      let invite = invitationScope(projectId);
+      return validInvitation(projectId) && (
+        (invite.scope == 'workspace' &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['members', 'guests']) &&
+          addsSelf(existing().members, incoming().members) &&
+          incoming().get('guests', []).toSet() == existing().get('guests', []).toSet().difference([request.auth.uid].toSet())) ||
+        (invite.scope == 'channel' &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['guests']) &&
+          addsSelf(existing().get('guests', []), incoming().guests))
+      );
     }
 
     function isValidMember(memberId, data) {
@@ -98,32 +137,59 @@ service cloud.firestore {
              data.status in ['confirmed', 'proposed', 'superseded', 'deprecated'];
     }
 
+    match /recruitInvites/{token} {
+      allow get: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(token) &&
+        incoming().keys().hasOnly(['projectId', 'channelId', 'scope', 'createdBy', 'expiresAt']) &&
+        incoming().createdBy == request.auth.uid &&
+        incoming().expiresAt > request.time.toMillis() &&
+        incoming().expiresAt <= request.time.toMillis() + 604800000 &&
+        ((incoming().scope == 'workspace' && incoming().channelId == null && isFullMember(incoming().projectId)) ||
+         (incoming().scope == 'channel' && canReadChannel(incoming().projectId, incoming().channelId) &&
+          isChannelRecruiter(incoming().projectId, incoming().channelId)));
+    }
+
     // Projects collection
     match /projects/{projectId} {
-      allow get: if isSignedIn() && (resource.data.ownerId == request.auth.uid || request.auth.uid in resource.data.members);
-      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || request.auth.uid in resource.data.members);
+      allow get: if isSignedIn() && (resource.data.ownerId == request.auth.uid || request.auth.uid in resource.data.members || request.auth.uid in resource.data.get('guests', []));
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || request.auth.uid in resource.data.members || request.auth.uid in resource.data.get('guests', []));
       allow create: if isSignedIn() && isValidId(projectId) && isValidProject(incoming());
       allow update: if isSignedIn() && isValidId(projectId) && isProjectOwner(projectId) &&
                    incoming().ownerId == existing().ownerId;
-      allow update: if isSignedIn() && isValidId(projectId) && isSelfJoin();
+      allow update: if isSignedIn() && isValidId(projectId) && isSelfJoin(projectId);
       allow delete: if isSignedIn() && isValidId(projectId) && isProjectOwner(projectId);
+
+      match /joinRequests/{memberId} {
+        allow get: if isSignedIn() && memberId == request.auth.uid;
+        allow create, update: if isSignedIn() && memberId == request.auth.uid &&
+          incoming().keys().hasOnly(['token']) &&
+          incoming().token is string &&
+          get(/databases/$(database)/documents/recruitInvites/$(incoming().token)).data.projectId == projectId &&
+          get(/databases/$(database)/documents/recruitInvites/$(incoming().token)).data.expiresAt > request.time.toMillis();
+      }
 
       // Channels subcollection
       match /channels/{channelId} {
-        allow get, list: if isProjectMember(projectId);
-        allow create: if isProjectMember(projectId) && isValidId(channelId) &&
+        allow get, list: if isFullMember(projectId) || (isProjectMember(projectId) && request.auth.uid in resource.data.get('members', []));
+        allow create: if isFullMember(projectId) && isValidId(channelId) &&
                       incoming().get('adminId', '') == request.auth.uid;
-        allow update: if isProjectMember(projectId) && isValidId(channelId) &&
-                      !incoming().diff(existing()).affectedKeys().hasAny(['adminId', 'theme']);
+        allow update: if isFullMember(projectId) && isValidId(channelId) &&
+                      !incoming().diff(existing()).affectedKeys().hasAny(['adminId', 'theme', 'members']);
         allow update: if isProjectMember(projectId) && isValidId(channelId) &&
                       incoming().diff(existing()).affectedKeys().hasOnly(['theme']) &&
                       (incoming().theme == null || incoming().theme in ['pokemon', 'avengers', 'harry-potter', 'whimsy']) &&
-                      isChannelAdmin();
+                      canReadChannel(projectId, channelId) && isChannelAdmin();
+
+        allow update: if isSignedIn() && isValidId(channelId) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['members']) &&
+          addsSelf(existing().get('members', []), incoming().members) &&
+          validInvitation(projectId) && invitationScope(projectId).scope == 'channel' &&
+          invitationScope(projectId).channelId == channelId;
 
         function isChannelAdmin() {
           let project = get(/databases/$(database)/documents/projects/$(projectId)).data;
           let adminId = existing().get('adminId', '');
-          let assigned = adminId == project.ownerId || adminId in project.members;
+          let assigned = adminId == project.ownerId || adminId in project.members || adminId in project.get('guests', []);
           return request.auth.uid == (assigned ? adminId : project.ownerId);
         }
         allow update: if isProjectOwner(projectId) && isValidId(channelId) &&
@@ -135,14 +201,14 @@ service cloud.firestore {
 
         // Messages subcollection
         match /messages/{messageId} {
-          allow get, list: if isProjectMember(projectId);
-          allow create: if isProjectMember(projectId) && isValidId(messageId) && isValidMessage(incoming());
-          allow update: if isProjectMember(projectId) && isValidId(messageId) &&
+          allow get, list: if canReadChannel(projectId, channelId);
+          allow create: if canReadChannel(projectId, channelId) && isValidId(messageId) && isValidMessage(incoming());
+          allow update: if canReadChannel(projectId, channelId) && isValidId(messageId) &&
                        existing().senderId == request.auth.uid &&
                        incoming().senderId == existing().senderId &&
                        isValidMessage(incoming());
-          allow update: if isProjectMember(projectId) && isReactionOnlyUpdate();
-          allow delete: if isProjectMember(projectId) && (existing().senderId == request.auth.uid ||
+          allow update: if canReadChannel(projectId, channelId) && isReactionOnlyUpdate();
+          allow delete: if canReadChannel(projectId, channelId) && (existing().senderId == request.auth.uid ||
              isProjectOwner(projectId) ||
              get(/databases/$(database)/documents/projects/$(projectId)/channels/$(channelId)).data.get('adminId', '') == request.auth.uid);
         }
@@ -150,11 +216,11 @@ service cloud.firestore {
 
       // Tasks subcollection
       match /tasks/{taskId} {
-        allow get, list: if isProjectMember(projectId);
-        allow create: if isProjectMember(projectId) && isValidId(taskId) && isValidTask(incoming());
-        allow update: if isProjectMember(projectId) && isValidId(taskId) && isValidTask(incoming()) &&
+        allow get, list: if isFullMember(projectId);
+        allow create: if isFullMember(projectId) && isValidId(taskId) && isValidTask(incoming());
+        allow update: if isFullMember(projectId) && isValidId(taskId) && isValidTask(incoming()) &&
                      incoming().projectId == existing().projectId;
-        allow delete: if isProjectMember(projectId) && isValidId(taskId);
+        allow delete: if isFullMember(projectId) && isValidId(taskId);
       }
 
       // Member profiles (name, role, skills, presence) - you can only edit your own
@@ -167,17 +233,17 @@ service cloud.firestore {
 
       // Saved AI analysis per channel (summary, proposed tasks, open questions) shared with the team
       match /analyses/{channelId} {
-        allow get, list: if isProjectMember(projectId);
-        allow create, update, delete: if isProjectMember(projectId) && isValidId(channelId);
+        allow get: if canReadChannel(projectId, channelId);
+        allow create, update, delete: if canReadChannel(projectId, channelId) && isValidId(channelId);
       }
 
       // Decisions subcollection
       match /decisions/{decisionId} {
-        allow get, list: if isProjectMember(projectId);
-        allow create: if isProjectMember(projectId) && isValidId(decisionId) && isValidDecision(incoming());
-        allow update: if isProjectMember(projectId) && isValidId(decisionId) && isValidDecision(incoming()) &&
+        allow get, list: if isFullMember(projectId);
+        allow create: if isFullMember(projectId) && isValidId(decisionId) && isValidDecision(incoming());
+        allow update: if isFullMember(projectId) && isValidId(decisionId) && isValidDecision(incoming()) &&
                      incoming().projectId == existing().projectId;
-        allow delete: if isProjectMember(projectId) && isValidId(decisionId);
+        allow delete: if isFullMember(projectId) && isValidId(decisionId);
       }
     }
   }

@@ -48,6 +48,9 @@ export const ChatWorkspace: React.FC = () => {
     setMyChannelCharacter,
     currentUser,
     mode,
+    createRecruitInvite,
+    addToast,
+    isChannelGuest,
   } = useWorkspace();
 
   const [inputContent, setInputContent] = useState('');
@@ -187,7 +190,7 @@ export const ChatWorkspace: React.FC = () => {
           {/* Analyze Conversation Button */}
           <button
             onClick={analyzeCurrentChannel}
-            disabled={isAnalyzing || currentMessages.length === 0}
+            disabled={isChannelGuest || isAnalyzing || currentMessages.length === 0}
             className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
           >
             {isAnalyzing ? (
@@ -239,6 +242,36 @@ export const ChatWorkspace: React.FC = () => {
             </label>
           )}
           </div>
+          {canChangeTheme && (
+            <div className="border-t border-slate-800 px-5 py-3">
+              <button type="button" className="rounded-md bg-emerald-500 px-3 py-2 text-xs font-bold text-slate-950" onClick={async () => {
+                const link = await createRecruitInvite(channel.id);
+                if (!link) return;
+                try {
+                  await navigator.clipboard.writeText(link);
+                  addToast({ type: 'success', title: 'Channel invite copied', message: 'This link grants access only to this channel. Valid for 7 days.' });
+                } catch {
+                  addToast({ type: 'info', title: 'Channel invite link', message: link });
+                }
+              }}>Recruit to channel</button>
+              <p className="mt-2 text-xs text-slate-400">Invitees can chat in this channel. Full workspace access requires a workspace invite.</p>
+            </div>
+          )}
+          <section className="border-t border-slate-800 px-5 py-3" aria-label="Channel members">
+            <h3 className="mb-2 text-xs font-bold text-slate-200">Channel recruits</h3>
+            <p className="mb-3 text-xs text-slate-400">Members invited specifically to this channel. Workspace members also have access.</p>
+            {teamMembers.filter((member) => channel.members?.includes(member.id) && !project.members.includes(member.id)).length === 0 ? (
+              <p className="text-xs text-slate-500">No channel-only recruits yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {teamMembers.filter((member) => channel.members?.includes(member.id) && !project.members.includes(member.id)).map((member) => (
+                  <li key={member.id} className="flex items-center gap-2 text-xs text-slate-300">
+                    <img src={member.avatar} alt="" className="h-6 w-6 rounded-full" />{member.name}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
           {canChangeTheme && <ChannelThemePicker />}
         </dialog>
       )}
