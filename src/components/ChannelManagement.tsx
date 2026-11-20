@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Check, Copy, Hash, ShieldCheck, UserPlus } from 'lucide-react';
+import { ArrowLeft, Check, Copy, Trash2, Hash, ShieldCheck, UserPlus } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { getChannelTheme } from '../data/channelThemes';
 import { ChannelThemePicker } from './ChannelThemePicker';
+import { RenameForm } from './RenameForm';
 import type { Channel } from '../types';
 
 /** Each channel gets its own mounted panel so pending invites stay with that channel. */
 const ChannelSettingsPanel: React.FC<{ channel: Channel }> = ({ channel }) => {
   const {
     currentUser, project, teamMembers, mode, isProjectOwner,
-    getChannelAdminId, setChannelAdmin, createRecruitInvite, setActiveTab, addToast,
+    getChannelAdminId, setChannelAdmin, createRecruitInvite, setActiveTab, addToast, renameChannel,
   } = useWorkspace();
   const [savingAdmin, setSavingAdmin] = useState(false);
   const [creatingInvite, setCreatingInvite] = useState(false);
@@ -33,10 +34,15 @@ const ChannelSettingsPanel: React.FC<{ channel: Channel }> = ({ channel }) => {
         <p className="mt-2 text-sm text-slate-400">{channel.topic || 'Manage the people and appearance of this channel.'}</p>
       </header>
 
+      {isProjectOwner && (
+        <section className="border-b border-slate-800 p-6" aria-label="Channel details">
+          <RenameForm name={channel.name} label="Channel name" hint="Spaces become hyphens. Letters, numbers, hyphens and underscores are supported." onSave={(name) => renameChannel(channel.id, name)} />
+        </section>
+      )}
       <section className="space-y-4 border-b border-slate-800 p-6" aria-labelledby="channel-leader-title">
         <div>
           <h3 id="channel-leader-title" className="flex items-center gap-2 text-sm font-bold"><ShieldCheck size={16} className="text-emerald-400" /> Channel admin</h3>
-          <p className="mt-1 text-xs text-slate-400">{admin?.name || 'Workspace owner'} manages this channel. Each channel has one admin.</p>
+          <p className="mt-1 text-xs text-slate-400">{admin?.name || 'Workspace owner'} handles recruitment for this channel. Each channel has one admin.</p>
         </div>
         {isProjectOwner && (
           <div>
@@ -71,7 +77,7 @@ const ChannelSettingsPanel: React.FC<{ channel: Channel }> = ({ channel }) => {
       <section className="space-y-3 border-b border-slate-800 p-6" aria-labelledby="channel-recruit-title">
         <h3 id="channel-recruit-title" className="flex items-center gap-2 text-sm font-bold"><UserPlus size={16} className="text-emerald-400" /> Channel recruitment</h3>
         <p className="text-xs text-slate-400">Recruit people to #{channel.name}. Links expire after 7 days.</p>
-        {isChannelAdmin ? (
+        {(isProjectOwner || isChannelAdmin) ? (
           <>
             <button disabled={creatingInvite} className="rounded-lg bg-emerald-500 px-4 py-2.5 text-xs font-bold text-slate-950 disabled:opacity-50" onClick={async () => {
               setCreatingInvite(true);
@@ -113,15 +119,16 @@ const ChannelSettingsPanel: React.FC<{ channel: Channel }> = ({ channel }) => {
         </div>
       </section>
 
-      {isChannelAdmin ? <ChannelThemePicker key={channel.id} /> : (
-        <section className="space-y-1 p-6"><h3 className="text-sm font-bold">Channel theme</h3><p className="text-xs text-slate-400">{theme?.name || 'Sermona default'} · Only the channel admin can change the theme.</p></section>
+      {isProjectOwner ? <ChannelThemePicker key={channel.id} /> : (
+        <section className="space-y-1 p-6"><h3 className="text-sm font-bold">Channel theme</h3><p className="text-xs text-slate-400">{theme?.name || 'Sermona default'} · The workspace owner manages channel appearance.</p></section>
       )}
     </div>
   );
 };
 
 export const ChannelManagement: React.FC = () => {
-  const { channels, activeChannelId, setActiveChannelId, setActiveTab, isProjectOwner, getChannelAdminId, currentUser } = useWorkspace();
+  const { channels, activeChannelId, setActiveChannelId, setActiveTab, isProjectOwner, getChannelAdminId, currentUser, project, deleteWorkspace, mode, renameWorkspace } = useWorkspace();
+  const [deleting, setDeleting] = useState(false);
   const manageable = channels.filter((channel) => isProjectOwner || getChannelAdminId(channel) === currentUser.id);
   const selected = manageable.find((channel) => channel.id === activeChannelId) || manageable[0];
   useEffect(() => {
@@ -132,10 +139,29 @@ export const ChannelManagement: React.FC = () => {
     <div className="h-full min-w-0 flex-1 overflow-y-auto p-5 lg:p-8">
       <header className="mb-7">
         <button onClick={() => setActiveTab('channels')} className="mb-4 flex items-center gap-2 text-xs text-slate-400 hover:text-emerald-400"><ArrowLeft size={14} /> Back to chats</button>
-        <p className="mb-2 font-mono text-[10px] uppercase tracking-[.2em] text-emerald-400">Team leader workspace</p>
-        <h1 className="text-3xl font-bold tracking-tight">Channel management</h1>
-        <p className="mt-2 text-sm text-slate-400">Choose a channel to manage its admin, recruits, invites and appearance.</p>
+        <p className="mb-2 font-mono text-[10px] uppercase tracking-[.2em] text-emerald-400">{isProjectOwner ? 'Workspace owner' : 'Channel admin'}</p>
+        <h1 className="text-3xl font-bold tracking-tight">{isProjectOwner ? 'Workspace management' : 'Channel recruitment'}</h1>
+        <p className="mt-2 text-sm text-slate-400">{isProjectOwner ? 'Manage channels, assign admins, set themes and control your workspace.' : 'Choose your channel to recruit teammates and view recruits.'}</p>
       </header>
+      {isProjectOwner && (
+        <section className="mb-5 rounded-xl border border-slate-800 bg-slate-900 p-5" aria-label="Workspace details">
+          <RenameForm key={project.id} name={project.name} label="Workspace name" hint="Choose a name up to 100 characters." onSave={renameWorkspace} />
+        </section>
+      )}
+      {isProjectOwner && mode === 'cloud' && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-500/25 bg-rose-500/5 p-4">
+          <div><p className="text-sm font-semibold">Workspace ownership</p><p className="mt-1 text-xs text-slate-400">Only you can delete {project.name}.</p></div>
+          <button disabled={deleting} className="flex items-center gap-2 rounded-lg border border-rose-500/40 px-3 py-2 text-xs font-semibold text-rose-400 disabled:opacity-50" onClick={async () => {
+            if (!window.confirm('Permanently delete ' + project.name + ', its channels, messages, tasks and invites? This cannot be undone.')) return;
+            setDeleting(true);
+            try {
+              await deleteWorkspace();
+            } finally {
+              setDeleting(false);
+            }
+          }}><Trash2 size={14} />{deleting ? 'Deleting workspace…' : 'Delete workspace'}</button>
+        </div>
+      )}
       {selected ? (
         <div className="management-layout grid items-start gap-5">
           <nav aria-label="Choose channel settings" className="grid gap-2">

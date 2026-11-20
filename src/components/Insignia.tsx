@@ -12,7 +12,7 @@ interface Props {
 }
 
 const TONES: Record<NonNullable<Props['tone']>, [string, string]> = {
-  amber: ['#ffbf47', '#c97a08'],
+  amber: ['#d6c3ed', '#9273b5'],
   steel: ['#7b8796', '#3a4350'],
   cyan: ['#6fd6fa', '#1b7fa8'],
   red: ['#ff7b7b', '#a82a2a'],
@@ -45,7 +45,7 @@ export const Insignia: React.FC<Props> = ({ size = 44, label, active = false, cl
       </defs>
 
       {/* outer rim */}
-      <path d={hex} fill={`url(#rim-${id})`} stroke={active ? '#ffb020' : '#556170'} strokeWidth={active ? 4 : 2} />
+      <path d={hex} fill={`url(#rim-${id})`} stroke={active ? '#bca6db' : '#556170'} strokeWidth={active ? 4 : 2} />
       {/* face */}
       <path d={inner} fill={`url(#face-${id})`} />
       {/* bevel highlight */}
@@ -59,7 +59,7 @@ export const Insignia: React.FC<Props> = ({ size = 44, label, active = false, cl
         [14, 70],
         [14, 30],
       ].map(([x, y]) => (
-        <circle key={`${x}-${y}`} cx={x} cy={y} r="1.8" fill={active ? '#ffb020' : '#7c8795'} />
+        <circle key={`${x}-${y}`} cx={x} cy={y} r="1.8" fill={active ? '#bca6db' : '#7c8795'} />
       ))}
 
       {label ? (

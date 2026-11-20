@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { Plus, LogOut, Check, UserCog } from 'lucide-react';
 import { WorkspaceModal } from './WorkspaceModal';
+import { SermonaMark } from './SermonaMark';
 import { Insignia } from './Insignia';
 
 const TONES = ['amber', 'cyan', 'steel', 'olive', 'red', 'violet'] as const;
@@ -34,8 +35,8 @@ export const WorkspaceRail: React.FC = () => {
   return (
     <nav className="glass-dark rounded-2xl w-[76px] flex-shrink-0 h-full flex flex-col items-center py-4 gap-1 select-none">
       {/* Brand */}
-      <div className="mb-1 hover:animate-wiggle" title="Sermona">
-        <Insignia size={46} active />
+      <div className="mb-1" title="Sermona">
+        <SermonaMark size={46} />
       </div>
       <span className="term text-[8px] text-slate-600 mb-3">SERMONA</span>
 

@@ -3,6 +3,7 @@ import { useWorkspace } from '../context/WorkspaceContext';
 import { ChevronRight, CheckCircle2, AlertTriangle, FileCheck2, Radio } from 'lucide-react';
 import { getDeadlineState, parseDeadline, formatRelative } from '../lib/deadlines';
 import { Task, TaskStatus } from '../types';
+import { SermonaMark } from './SermonaMark';
 import { Insignia } from './Insignia';
 
 const STATUS_TAG: Record<TaskStatus, { label: string; cls: string }> = {
@@ -94,7 +95,7 @@ export const HomeView: React.FC = () => {
               </div>
             </div>
             <div className="hidden md:block animate-float">
-              <Insignia size={120} active />
+              <SermonaMark size={120} />
             </div>
           </div>
         </section>

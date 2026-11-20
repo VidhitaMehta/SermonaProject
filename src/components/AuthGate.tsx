@@ -1,7 +1,9 @@
 import React, { ReactNode } from 'react';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { Loader2, ShieldCheck, ChevronRight, FileCheck2, Crosshair } from 'lucide-react';
+import { ShieldCheck, ChevronRight, FileCheck2, Crosshair } from 'lucide-react';
 import { Insignia } from './Insignia';
+import { ConnectionLoader } from './ConnectionLoader';
+import { SermonaLogo } from './SermonaLogo';
 
 const GoogleIcon = () => (
   <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
@@ -67,14 +69,7 @@ export const AuthGate: React.FC<{ children: ReactNode }> = ({ children }) => {
             </button>
           </div>
         ) : (
-          <>
-            <div className="animate-float">
-              <Insignia size={84} active />
-            </div>
-            <div className="term flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-500">
-              <Loader2 className="w-4 h-4 animate-spin text-emerald-500" /> Establishing link…
-            </div>
-          </>
+          <ConnectionLoader />
         )}
       </div>
     );
@@ -86,13 +81,7 @@ export const AuthGate: React.FC<{ children: ReactNode }> = ({ children }) => {
       <div className="min-h-screen w-screen flex font-sans">
         {/* Left: brand + live feed */}
         <div className="hidden lg:flex relative w-[55%] flex-col justify-between p-12 border-r border-slate-800">
-          <div className="flex items-center gap-3">
-            <Insignia size={44} active />
-            <div>
-              <div className="text-lg font-extrabold tracking-[0.15em] text-slate-100">SERMONA</div>
-              <div className="term text-[10px] text-slate-500 tracking-[0.2em]">COMMAND · COLLABORATION</div>
-            </div>
-          </div>
+          <SermonaLogo className="auth-sermona-logo" />
 
           <div className="space-y-10">
             <div>
@@ -116,8 +105,7 @@ export const AuthGate: React.FC<{ children: ReactNode }> = ({ children }) => {
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="hud relative w-full max-w-sm rounded-xl border border-slate-750 bg-slate-900/90 p-8 animate-fade-up">
             <div className="lg:hidden flex items-center gap-3 mb-8">
-              <Insignia size={40} active />
-              <span className="text-lg font-extrabold tracking-[0.15em] text-slate-100">SERMONA</span>
+              <SermonaLogo className="auth-sermona-logo" />
             </div>
 
             <div className="term text-[10px] uppercase tracking-[0.25em] text-emerald-500">// access terminal</div>

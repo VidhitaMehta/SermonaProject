@@ -44,6 +44,7 @@ import {
   getCountFromServer,
 } from 'firebase/firestore';
 import { onAuthStateChanged, signInWithPopup, signOut, User as FirebaseUser } from 'firebase/auth';
+import { deleteOwnedWorkspace } from '../lib/deleteWorkspace';
 import { CHARACTERS } from '../data/channelIdentities';
 import { fireConfetti } from '../lib/confetti';
 
@@ -177,6 +178,9 @@ interface WorkspaceContextType {
   canDeleteMessage: (message: Message) => boolean;
   /** True if the current user owns this workspace (always true in local demo mode). */
   isProjectOwner: boolean;
+  deleteWorkspace: () => Promise<boolean>;
+  renameWorkspace: (name: string) => Promise<void>;
+  renameChannel: (channelId: string, name: string) => Promise<void>;
   getChannelAdminId: (channel: Channel) => string;
   setChannelAdmin: (channelId: string, adminId: string) => Promise<void>;
   createNewProject: (name: string, tagline: string, description: string, deadline?: string | null) => void;
@@ -455,7 +459,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   const activeChannelAvailable = channels.some((channel) => channel.id === activeChannelId);
 
   const workspaceReady = IS_CLOUD
-    ? Boolean(authUser && cloudProjectId && projectLoaded && channelsLoaded)
+    ? Boolean(authUser && projectLoaded && (!cloudProjectId || channelsLoaded))
     : true;
 
   const isChannelGuest = IS_CLOUD && Boolean(authUser && project.ownerId !== authUser.uid && !project.members.includes(authUser.uid));
@@ -609,7 +613,9 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       return null;
     }
     const channel = channels.find((entry) => entry.id === channelId);
-    if (channelId ? !channel || getChannelAdminId(channel) !== authUser.uid : isChannelGuest) return null;
+    if (channelId ? !channel || (getChannelAdminId(channel) !== authUser.uid && project.ownerId !== authUser.uid) : project.ownerId !== authUser.uid) {
+      throw new Error(channelId ? 'Only this channel’s admin can create its recruit link.' : 'Only the workspace owner can create a workspace invite.');
+    }
     try {
       const ref = doc(collection(db, 'recruitInvites'));
       await setDoc(ref, {
@@ -619,8 +625,11 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       });
       return `${window.location.origin}${window.location.pathname}?invite=${ref.id}`;
     } catch (error) {
-      reportCloudError('create invite')(error);
-      return null;
+      const code = (error as { code?: string }).code;
+      if (code === 'permission-denied') {
+        throw new Error('Firebase blocked invite creation. Publish the updated firestore.rules in the correct Firebase project and database, then try again.');
+      }
+      throw new Error('Invite creation failed (' + (code || 'connection error') + '). Check your connection and retry.');
     }
   };
 
@@ -751,6 +760,19 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
           if (snap.exists()) {
             setProject(snap.data() as Project);
             setProjectLoaded(true);
+          } else {
+            setProject(EMPTY_PROJECT);
+            setChannels([]);
+            setMessages({});
+            setTasks([]);
+            setDecisions([]);
+            setAnalyses({});
+            setTeamMembers([]);
+            setActiveChannelId('');
+            setCloudProjectId(null);
+            safeLocalRemove(LAST_PROJECT_KEY);
+            setProjectLoaded(true);
+            setChannelsLoaded(true);
           }
         },
         reportCloudError('project')
@@ -1615,7 +1637,46 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   // --- DELETING MESSAGES & CHANNELS ---
 
-  const isProjectOwner = IS_CLOUD ? Boolean(authUser && project.ownerId === authUser.uid) : true;
+  const isProjectOwner = Boolean(project.ownerId && project.ownerId === currentUser.id);
+
+  const renameWorkspace = async (name: string) => {
+    if (!isProjectOwner) throw new Error('Only the workspace owner can rename the workspace.');
+    const cleanName = name.trim();
+    if (!cleanName || cleanName.length > 100) throw new Error('Use a workspace name between 1 and 100 characters.');
+    const pid = project.id;
+    if (IS_CLOUD) {
+      if (!db || !cloudProjectId || cloudProjectId !== pid) throw new Error('Wait for the workspace to finish loading.');
+      await updateDoc(doc(db, 'projects', pid), { name: cleanName });
+    }
+    setProject((previous) => previous.id === pid ? { ...previous, name: cleanName } : previous);
+  };
+
+  const renameChannel = async (channelId: string, name: string) => {
+    if (!isProjectOwner) throw new Error('Only the workspace owner can rename channels.');
+    if (!channels.some((channel) => channel.id === channelId)) throw new Error('This channel is no longer available.');
+    const cleanName = name.trim().toLowerCase().replace(/\s+/g, '-');
+    if (!/^[a-z0-9][a-z0-9_-]{0,99}$/.test(cleanName)) {
+      throw new Error('Use 1–100 letters, numbers, hyphens or underscores. Start with a letter or number.');
+    }
+    if (IS_CLOUD) {
+      if (!db || !cloudProjectId) throw new Error('Wait for the workspace to finish loading.');
+      await updateDoc(doc(db, 'projects', cloudProjectId, 'channels', channelId), { name: cleanName });
+    }
+    setChannels((previous) => previous.map((channel) => channel.id === channelId ? { ...channel, name: cleanName } : channel));
+  };
+
+  const deleteWorkspace = async (): Promise<boolean> => {
+    if (!isProjectOwner || !IS_CLOUD || !db || !cloudProjectId || !authUser) return false;
+    const pid = cloudProjectId;
+    try {
+      await deleteOwnedWorkspace(db, pid, authUser.uid);
+      addToast({ type: 'success', title: 'Workspace deleted', message: 'The workspace and its collected records were removed.' });
+      return true;
+    } catch (error) {
+      addToast({ type: 'error', title: 'Workspace not deleted', message: error instanceof Error ? error.message : 'Please retry.' });
+      return false;
+    }
+  };
 
   const getChannelAdminId = (channel: Channel) => {
     const members = IS_CLOUD ? project.members : teamMembers.map((member) => member.id);
@@ -1645,9 +1706,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   const canDeleteMessage = (message: Message) => {
-    const channel = channels.find((entry) => entry.id === message.channelId);
-    return !IS_CLOUD || message.senderId === currentUser.id || isProjectOwner ||
-      (channel !== undefined && getChannelAdminId(channel) === currentUser.id);
+    return !IS_CLOUD || message.senderId === currentUser.id || isProjectOwner;
   };
 
   const deleteMessage = (messageId: string) => {
@@ -1736,7 +1795,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   const setChannelTheme = async (channelId: string, theme: ChannelTheme | null): Promise<boolean> => {
     const channel = channels.find((entry) => entry.id === channelId);
-    if (!channel || getChannelAdminId(channel) !== currentUser.id) return false;
+    if (!channel || !isProjectOwner) return false;
     if (theme !== null && !['pokemon', 'avengers', 'harry-potter', 'whimsy'].includes(theme)) return false;
     // Persist only this field: never overwrite concurrent channel or message edits.
     if (IS_CLOUD) {
@@ -1753,7 +1812,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   const createChannel = (name: string, topic: string) => {
-    if (isChannelGuest) return;
+    if (!isProjectOwner) return;
     const cleanName = name.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
     const newChannel: Channel = {
       id: newId('chan'),
@@ -1910,6 +1969,9 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         deleteMessage,
         canDeleteMessage,
         isProjectOwner,
+        deleteWorkspace,
+        renameWorkspace,
+        renameChannel,
         getChannelAdminId,
         setChannelAdmin,
         createNewProject,

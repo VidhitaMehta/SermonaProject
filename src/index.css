@@ -1,43 +1,32 @@
 @import "tailwindcss";
 
-/*
- * Sermona "Command" theme — industrial dark, tactical HUD.
- *
- * The components use Tailwind's slate / emerald / amber … scales, so we
- * redefine those scales here instead of rewriting every class:
- *   - slate-950 … 800  → gunmetal surfaces (darkest → lighter)
- *   - slate-700 … 100  → borders → text (lightest = primary text)
- *   - "emerald" is the main accent  → signal amber
- *   - "amber"   is the warning tone → orange
- *   - "teal"    → steel cyan (info / active)
- *   - "rose"    → alert red
- */
+/* Shared navy surfaces and lavender accents follow the Sermona identity. */
 @theme {
   --font-sans: 'Space Grotesk', 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* Gunmetal surfaces */
-  --color-slate-950: #080c16;
-  --color-slate-900: #101624;
-  --color-slate-850: #151d30;
-  --color-slate-800: #202b40;
-  --color-slate-750: #2b3752;
-  --color-slate-700: #394968;
+  /* Navy surfaces */
+  --color-slate-950: #090b15;
+  --color-slate-900: #131321;
+  --color-slate-850: #1b1a2b;
+  --color-slate-800: #2b273c;
+  --color-slate-750: #393149;
+  --color-slate-700: #514260;
   /* Text */
-  --color-slate-600: #70809c;
-  --color-slate-500: #8897b0;
-  --color-slate-400: #9ba6b3;
-  --color-slate-300: #c2cad4;
-  --color-slate-200: #dde3ea;
-  --color-slate-100: #f0f3f6;
+  --color-slate-600: #8c819e;
+  --color-slate-500: #a296b0;
+  --color-slate-400: #b5a9c3;
+  --color-slate-300: #d2c7df;
+  --color-slate-200: #e6dff0;
+  --color-slate-100: #f4eff9;
 
-  /* Signal amber (primary accent) */
-  --color-emerald-950: #08232b;
-  --color-emerald-600: #24c4dc;
-  --color-emerald-500: #56e8f3;
-  --color-emerald-400: #8df5fb;
-  --color-emerald-300: #b2f8fc;
-  --color-emerald-200: #d4fcff;
+  /* Lavender primary accent */
+  --color-emerald-950: #251c35;
+  --color-emerald-600: #a78ac3;
+  --color-emerald-500: #bca6db;
+  --color-emerald-400: #d6c3ed;
+  --color-emerald-300: #e5d7f4;
+  --color-emerald-200: #f0e7fa;
 
   /* Warning orange */
   --color-amber-950: #2a1607;
@@ -46,11 +35,11 @@
   --color-amber-300: #ffb06b;
   --color-amber-200: #ffc48f;
 
-  /* Steel cyan */
-  --color-teal-600: #1f9fd0;
-  --color-teal-500: #45c8f5;
-  --color-teal-400: #6fd6fa;
-  --color-teal-300: #98e3fc;
+  /* Mauve secondary accent */
+  --color-teal-600: #9d719d;
+  --color-teal-500: #bc98bb;
+  --color-teal-400: #d1b2cc;
+  --color-teal-300: #e2cddd;
 
   /* Alert red */
   --color-rose-950: #2a0f12;
@@ -58,12 +47,12 @@
   --color-rose-400: #ff6b6b;
   --color-rose-300: #ff9090;
 
-  --color-purple-500: #8b9cff;
-  --color-purple-400: #a4b2ff;
-  --color-purple-300: #bdc7ff;
+  --color-purple-500: #aa90c8;
+  --color-purple-400: #c0a9dc;
+  --color-purple-300: #d9c8eb;
 
-  --color-blue-500: #4f8cff;
-  --color-blue-400: #7aa7ff;
+  --color-blue-500: #9b91ce;
+  --color-blue-400: #c0b5e5;
 
   --color-signal: #3ddc84;
 
@@ -104,7 +93,7 @@
 
 html,
 body {
-  background: #060913;
+  background: #090b15;
   color: var(--color-slate-100);
 }
 
@@ -115,9 +104,9 @@ body {
   z-index: -1;
   overflow: hidden;
   background:
-    radial-gradient(60% 50% at 85% 0%, rgb(86 232 243 / 0.10), transparent 70%),
+    radial-gradient(60% 50% at 85% 0%, rgb(188 166 219 / 0.10), transparent 70%),
     radial-gradient(50% 45% at 0% 100%, rgb(69 200 245 / 0.08), transparent 70%),
-    #060913;
+    #090b15;
 }
 .sermona-bg::before {
   content: '';
@@ -134,15 +123,15 @@ body {
 /* ---------- Industrial panel (kept the old class name "glass") ---------- */
 .glass {
   position: relative;
-  background: linear-gradient(180deg, #11192b 0%, #0b1120 100%);
-  border: 1px solid #26334b;
+  background: linear-gradient(180deg, #181526 0%, #0e101c 100%);
+  border: 1px solid #30293f;
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.04),
     0 20px 40px -24px rgb(0 0 0 / 0.8);
 }
 .glass-dark {
-  background: linear-gradient(180deg, #0b1120 0%, #080d19 100%);
-  border: 1px solid #202b40;
+  background: linear-gradient(180deg, #0e101c 0%, #0b0d17 100%);
+  border: 1px solid #2b273c;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03);
 }
 
@@ -172,7 +161,7 @@ body {
 
 /* Accent fill (kept the old class name "bg-fun") — brushed amber */
 .bg-fun {
-  background-image: linear-gradient(135deg, #8df5fb 0%, #56e8f3 45%, #6388ff 100%);
+  background-image: linear-gradient(135deg, #d6c3ed 0%, #bca6db 45%, #9d7fbc 100%);
   color: #0b0e12;
 }
 /* Accent text (kept the old class name "text-fun") */
@@ -184,7 +173,7 @@ body {
 .hazard {
   background-image: repeating-linear-gradient(
     -45deg,
-    rgb(86 232 243 / 0.9) 0 8px,
+    rgb(188 166 219 / 0.9) 0 8px,
     rgb(13 17 22 / 0.9) 8px 16px
   );
 }
@@ -195,8 +184,8 @@ body {
 }
 .lift:hover {
   transform: translateY(-2px);
-  border-color: rgb(86 232 243 / 0.45) !important;
-  box-shadow: 0 14px 30px -18px rgb(86 232 243 / 0.35);
+  border-color: rgb(188 166 219 / 0.45) !important;
+  box-shadow: 0 14px 30px -18px rgb(188 166 219 / 0.35);
 }
 
 /* Tiny press effect on buttons */
@@ -207,7 +196,7 @@ button:not(:disabled):active {
 /* Primary buttons: amber with dark text (white on amber is unreadable) */
 .bg-emerald-600,
 .bg-emerald-500 {
-  background-image: linear-gradient(135deg, #8df5fb 0%, #56e8f3 50%, #6388ff 100%);
+  background-image: linear-gradient(135deg, #d6c3ed 0%, #bca6db 50%, #9d7fbc 100%);
 }
 .bg-emerald-600.text-white,
 .bg-emerald-500.text-white,
@@ -224,8 +213,8 @@ button:not(:disabled):active {
 
 /* Modals rendered through <Portal> */
 .modal-root [class*="max-w-"] {
-  background: linear-gradient(180deg, #151b23 0%, #10151c 100%);
-  border: 1px solid #2b3752;
+  background: linear-gradient(180deg, #191526 0%, #10111e 100%);
+  border: 1px solid #393149;
 }
 
 /* Confetti pieces (see src/lib/confetti.ts) */
@@ -240,7 +229,7 @@ button:not(:disabled):active {
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #2b3752 transparent;
+  scrollbar-color: #393149 transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -252,31 +241,32 @@ button:not(:disabled):active {
 }
 
 /* Orbital interface */
-.sermona-bg { background: radial-gradient(ellipse at 85% 5%, #6554d324, transparent 52%), radial-gradient(ellipse at 15% 85%, #22d3ee14, transparent 48%), #060913; }
+.sermona-bg { background: radial-gradient(ellipse at 85% 5%, #9273b522, transparent 52%), radial-gradient(ellipse at 15% 85%, #bca6db10, transparent 48%), #090b15; }
 .sermona-bg::before { background-size: 64px 64px; opacity: .5; }
-.glass { background: linear-gradient(145deg, #121b2bee, #0a1020f5); border-color: #2b3850; }
-.glass-dark { background: linear-gradient(180deg, #10182a, #080d19); }
+.glass { background: linear-gradient(145deg, #181525ee, #0d0e1af5); border-color: #342c43; }
+.glass-dark { background: linear-gradient(180deg, #151322, #0b0d17); }
 .glass, .glass-dark { border-radius: 12px; }
 h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; }
+h1 { font-family: Baskerville, 'Palatino Linotype', Georgia, serif; font-weight: 400; }
 button { transition: background-color .18s, border-color .18s, box-shadow .18s, color .18s; }
-button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid #8df5fb; outline-offset: 4px; }
-input, textarea, select { accent-color: #56e8f3; }
-.lift { background-image: linear-gradient(130deg, #17213866, transparent); }
-.lift:hover { box-shadow: 0 8px 28px -16px #56e8f355, inset 0 1px #ffffff0a; }
-.bg-fun { box-shadow: 0 0 22px #56e8f326; }
-.overview-hero { min-height: 250px; background: radial-gradient(ellipse at 85% 20%, #6654d338, transparent 55%), linear-gradient(115deg, #101c30, #0b1223 65%); border-color: #394766; }
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid #d6c3ed; outline-offset: 4px; }
+input, textarea, select { accent-color: #bca6db; }
+.lift { background-image: linear-gradient(130deg, #33273f44, transparent); }
+.lift:hover { box-shadow: 0 8px 28px -16px #bca6db55, inset 0 1px #ffffff0a; }
+.bg-fun { box-shadow: 0 0 22px #bca6db26; }
+.overview-hero { min-height: 250px; background: radial-gradient(ellipse at 85% 20%, #9876b92b, transparent 55%), linear-gradient(115deg, #1c172c, #10101e 65%); border-color: #41334e; }
 .overview-hero h1 { font-size: clamp(1.8rem, 3vw, 3rem); line-height: 1.12; letter-spacing: -.045em; }
 .overview-orbit { position: relative; width: 176px; height: 176px; place-items: center; }
-.overview-orbit::before, .overview-orbit::after { content: ''; position: absolute; inset: 0; border: 1px solid #56e8f338; border-radius: 50%; transform: rotate(-30deg) scaleY(.76); }
-.overview-orbit::after { inset: -14px; border-style: dashed; border-color: #a998ff40; transform: rotate(35deg) scaleY(.8); }
-.overview-orbit svg { filter: drop-shadow(0 0 24px #56e8f333); }
+.overview-orbit::before, .overview-orbit::after { content: ''; position: absolute; inset: 0; border: 1px solid #bca6db38; border-radius: 50%; transform: rotate(-30deg) scaleY(.76); }
+.overview-orbit::after { inset: -14px; border-style: dashed; border-color: #baa0d440; transform: rotate(35deg) scaleY(.8); }
+.overview-orbit svg { filter: drop-shadow(0 0 24px #bca6db33); }
 .overview-stat { position: relative; overflow: hidden; padding: 20px; }
-.overview-stat::before { content: ''; position: absolute; top: 0; left: 20px; width: 26px; height: 2px; background: #56e8f3; }
-.overview-stat:nth-child(2)::before { background: #a998ff; }
+.overview-stat::before { content: ''; position: absolute; top: 0; left: 20px; width: 26px; height: 2px; background: #bca6db; }
+.overview-stat:nth-child(2)::before { background: #baa0d4; }
 .overview-stat:nth-child(3)::before { background: #ff8a8a; }
 .overview-stat:nth-child(4)::before { background: #3ddc84; }
 .overview-stat > div:last-child { font-size: 2rem; letter-spacing: -.04em; }
-.workspace-topline { min-height: 48px; background: #090f1be6; }
+.workspace-topline { min-height: 48px; background: #0c0d18ee; }
 @media (max-width: 1100px) { .workspace-layout { padding: 8px; gap: 8px; } .workspace-sidebar { width: 200px; } }
 @media (max-width: 760px) { .workspace-layout { flex-wrap: wrap; overflow-y: auto; } .workspace-rail { width: 56px; } .workspace-sidebar { width: 164px; } .workspace-main { min-width: 100%; min-height: 75vh; } .workspace-topline { font-size: 9px; padding-inline: 12px; gap: 12px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
@@ -408,3 +398,95 @@ input, textarea, select { accent-color: #56e8f3; }
 @media (min-width: 1100px) {
   .management-layout { grid-template-columns: 210px minmax(0, 1fr); }
 }
+/* People connect through signal waves while authentication loads. */
+.connection-loader {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 100svh;
+  padding: 90px 20px 40px;
+  overflow: hidden;
+  color: #ebe4f3;
+  background: radial-gradient(ellipse at 50% 42%, #21172e80, transparent 64%), #090b15;
+}
+.connection-brand { position: absolute; top: clamp(22px, 5vh, 54px); font: 30px/1 Georgia, serif; letter-spacing: .13em; text-align: center; color: #e1d6ef; }
+.connection-brand span { display: block; margin-top: 10px; font: 10px/1.4 var(--font-mono); letter-spacing: .06em; color: #9b8da9; }
+.connection-art { width: min(700px, 96vw); height: min(52vh, 440px); }
+.connection-art svg { display: block; width: 100%; height: 100%; }
+.connection-wave { transform-origin: 320px 220px; opacity: 0; animation: connection-ripple 4.8s ease-out infinite; }
+.connection-person { animation: connection-person-glow 4.8s ease-in-out infinite; }
+.connection-node-pulse { transform-box: fill-box; transform-origin: center; animation: connection-node-breathe 4.8s ease-in-out infinite; }
+.connection-person:nth-child(2n) .connection-node-pulse { animation-delay: -2.4s; }
+.connection-signals circle { opacity: 0; }
+.connection-caption { position: relative; margin-top: 6px; text-align: center; }
+.connection-eyebrow { display: flex; align-items: center; justify-content: center; gap: 8px; font: 10px/1.5 var(--font-mono); letter-spacing: .17em; text-transform: uppercase; color: #c2b1d3; }
+.connection-eyebrow > span:first-child { height: 5px; width: 5px; border-radius: 50%; background: #abd2ce; box-shadow: 0 0 12px #abd2ce66; }
+.connection-ellipsis { display: inline-block; width: 8px; margin-left: -7px; animation: connection-person-glow 2.4s ease-in-out infinite; }
+.connection-caption h1 { margin-top: 14px; font-family: Georgia, serif; font-size: clamp(22px, 3.5vw, 32px); font-weight: 400; letter-spacing: -.025em; }
+.connection-description { margin-top: 10px; font-size: 12px; color: #958aa3; }
+@keyframes connection-ripple {
+  0% { transform: scale(1); opacity: 0; }
+  18% { opacity: .42; }
+  100% { transform: scale(3.2); opacity: 0; }
+}
+@keyframes connection-person-glow {
+  0%, 100% { opacity: .5; }
+  50% { opacity: 1; }
+}
+@keyframes connection-node-breathe {
+  0%, 100% { transform: scale(.95); opacity: .3; }
+  50% { transform: scale(1.12); opacity: .8; }
+}
+@media (max-height: 580px) {
+  .connection-loader { padding: 20px; }
+  .connection-brand { position: static; font-size: 24px; }
+  .connection-art { height: 38vh; }
+  .connection-caption h1 { margin-top: 6px; font-size: 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .connection-wave { animation: none; transform: scale(2); opacity: .12; }
+  .connection-person, .connection-node-pulse, .connection-ellipsis { animation: none; opacity: 1; }
+  .connection-signals { display: none; }
+}
+
+.sermona-logo {
+  position: relative;
+  width: 250px;
+  max-width: 100%;
+  aspect-ratio: 350 / 108;
+  overflow: hidden;
+  background: #fff;
+  border-radius: 8px;
+}
+.sermona-logo img {
+  position: absolute;
+  width: 172.857143%;
+  max-width: none;
+  height: auto;
+  left: -39.428571%;
+  top: -148.148148%;
+}
+.connection-brand { width: min(250px, 65vw); }
+.connection-brand .sermona-logo { width: 100%; box-shadow: 0 10px 45px #05040c40; }
+.auth-sermona-logo { width: 245px; }
+@media (max-height: 580px) {
+  .connection-brand { width: 190px; }
+}
+
+/* Light-on-dark treatment preserves the supplied logo artwork and typography. */
+.sermona-logo { background: transparent; border-radius: 0; }
+.sermona-logo img { filter: invert(1) grayscale(1) brightness(1.15); mix-blend-mode: screen; }
+.connection-brand .sermona-logo { box-shadow: none; }
+
+/* Brand details on the workspace shell. */
+.workspace-topline { min-height: 64px; }
+.workspace-brand-logo { width: 174px; flex-shrink: 0; }
+.workspace-identity { display: flex; align-items: center; gap: 22px; }
+.workspace-identity-caption { color: var(--color-slate-500); font-size: 9px; letter-spacing: .15em; }
+.overview-hero h1 { font-family: Baskerville, 'Palatino Linotype', Georgia, serif; font-weight: 400; letter-spacing: -.025em; }
+.lift:hover { border-color: color-mix(in srgb, var(--color-emerald-500) 45%, transparent) !important; box-shadow: 0 8px 28px -16px color-mix(in srgb, var(--color-emerald-500) 28%, transparent); }
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline-color: var(--color-emerald-400); }
+@media (max-width: 760px) { .workspace-brand-logo { width: 142px; } .workspace-identity-caption { display: none; } }

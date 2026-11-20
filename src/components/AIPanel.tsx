@@ -179,9 +179,10 @@ export const AIPanel: React.FC = () => {
               <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-200 flex items-start gap-2">
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
                 <span>
-                  <span className="font-semibold">Basic mode — not AI.</span>{' '}
+                  <span className="font-semibold">Saved result · Basic mode — not AI.</span>{' '}
                   {currentAnalysis.notice ||
-                    'Results come from simple keyword rules. Add a GEMINI_API_KEY on the server for real AI analysis.'}
+                    'Results come from simple keyword rules.'}
+                  <button type="button" onClick={analyzeCurrentChannel} disabled={isAnalyzing} className="mt-2 block font-semibold underline disabled:opacity-50">Run analysis again</button>
                 </span>
               </div>
             )}

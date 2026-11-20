@@ -52,7 +52,7 @@ service cloud.firestore {
       let channel = get(/databases/$(database)/documents/projects/$(projectId)/channels/$(channelId)).data;
       let adminId = channel.get('adminId', '');
       let assigned = adminId == project.ownerId || adminId in project.members || adminId in project.get('guests', []);
-      return request.auth.uid == (assigned ? adminId : project.ownerId);
+      return project.ownerId == request.auth.uid || request.auth.uid == (assigned ? adminId : project.ownerId);
     }
 
     function validInvitation(projectId) {
@@ -139,19 +139,20 @@ service cloud.firestore {
 
     match /recruitInvites/{token} {
       allow get: if isSignedIn();
+      allow list, delete: if isProjectOwner(resource.data.projectId);
       allow create: if isSignedIn() && isValidId(token) &&
         incoming().keys().hasOnly(['projectId', 'channelId', 'scope', 'createdBy', 'expiresAt']) &&
         incoming().createdBy == request.auth.uid &&
         incoming().expiresAt > request.time.toMillis() &&
         incoming().expiresAt <= request.time.toMillis() + 604800000 &&
-        ((incoming().scope == 'workspace' && incoming().channelId == null && isFullMember(incoming().projectId)) ||
+        ((incoming().scope == 'workspace' && incoming().channelId == null && isProjectOwner(incoming().projectId)) ||
          (incoming().scope == 'channel' && canReadChannel(incoming().projectId, incoming().channelId) &&
           isChannelRecruiter(incoming().projectId, incoming().channelId)));
     }
 
     // Projects collection
     match /projects/{projectId} {
-      allow get: if isSignedIn() && (resource.data.ownerId == request.auth.uid || request.auth.uid in resource.data.members || request.auth.uid in resource.data.get('guests', []));
+      allow get: if isSignedIn() && (!exists(/databases/$(database)/documents/projects/$(projectId)) || resource.data.ownerId == request.auth.uid || request.auth.uid in resource.data.members || request.auth.uid in resource.data.get('guests', []));
       allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || request.auth.uid in resource.data.members || request.auth.uid in resource.data.get('guests', []));
       allow create: if isSignedIn() && isValidId(projectId) && isValidProject(incoming());
       allow update: if isSignedIn() && isValidId(projectId) && isProjectOwner(projectId) &&
@@ -160,6 +161,7 @@ service cloud.firestore {
       allow delete: if isSignedIn() && isValidId(projectId) && isProjectOwner(projectId);
 
       match /joinRequests/{memberId} {
+        allow list, delete: if isProjectOwner(projectId);
         allow get: if isSignedIn() && memberId == request.auth.uid;
         allow create, update: if isSignedIn() && memberId == request.auth.uid &&
           incoming().keys().hasOnly(['token']) &&
@@ -171,14 +173,14 @@ service cloud.firestore {
       // Channels subcollection
       match /channels/{channelId} {
         allow get, list: if isFullMember(projectId) || (isProjectMember(projectId) && request.auth.uid in resource.data.get('members', []));
-        allow create: if isFullMember(projectId) && isValidId(channelId) &&
+        allow create: if isProjectOwner(projectId) && isValidId(channelId) &&
                       incoming().get('adminId', '') == request.auth.uid;
-        allow update: if isFullMember(projectId) && isValidId(channelId) &&
+        allow update: if isProjectOwner(projectId) && isValidId(channelId) &&
                       !incoming().diff(existing()).affectedKeys().hasAny(['adminId', 'theme', 'members']);
         allow update: if isProjectMember(projectId) && isValidId(channelId) &&
                       incoming().diff(existing()).affectedKeys().hasOnly(['theme']) &&
                       (incoming().theme == null || incoming().theme in ['pokemon', 'avengers', 'harry-potter', 'whimsy']) &&
-                      canReadChannel(projectId, channelId) && isChannelAdmin();
+                      isProjectOwner(projectId);
 
         allow update: if isSignedIn() && isValidId(channelId) &&
           incoming().diff(existing()).affectedKeys().hasOnly(['members']) &&
@@ -186,12 +188,6 @@ service cloud.firestore {
           validInvitation(projectId) && invitationScope(projectId).scope == 'channel' &&
           invitationScope(projectId).channelId == channelId;
 
-        function isChannelAdmin() {
-          let project = get(/databases/$(database)/documents/projects/$(projectId)).data;
-          let adminId = existing().get('adminId', '');
-          let assigned = adminId == project.ownerId || adminId in project.members || adminId in project.get('guests', []);
-          return request.auth.uid == (assigned ? adminId : project.ownerId);
-        }
         allow update: if isProjectOwner(projectId) && isValidId(channelId) &&
                       incoming().diff(existing()).affectedKeys().hasOnly(['adminId']) &&
                       incoming().adminId is string &&
@@ -208,9 +204,7 @@ service cloud.firestore {
                        incoming().senderId == existing().senderId &&
                        isValidMessage(incoming());
           allow update: if canReadChannel(projectId, channelId) && isReactionOnlyUpdate();
-          allow delete: if canReadChannel(projectId, channelId) && (existing().senderId == request.auth.uid ||
-             isProjectOwner(projectId) ||
-             get(/databases/$(database)/documents/projects/$(projectId)/channels/$(channelId)).data.get('adminId', '') == request.auth.uid);
+          allow delete: if canReadChannel(projectId, channelId) && (existing().senderId == request.auth.uid || isProjectOwner(projectId));
         }
       }
 
@@ -233,7 +227,7 @@ service cloud.firestore {
 
       // Saved AI analysis per channel (summary, proposed tasks, open questions) shared with the team
       match /analyses/{channelId} {
-        allow get: if canReadChannel(projectId, channelId);
+        allow get, list: if isProjectOwner(projectId) || canReadChannel(projectId, channelId);
         allow create, update, delete: if canReadChannel(projectId, channelId) && isValidId(channelId);
       }
 

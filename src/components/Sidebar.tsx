@@ -108,7 +108,7 @@ export const Sidebar: React.FC = () => {
 
         {(isProjectOwner || channels.some((channel) => getChannelAdminId(channel) === currentUser.id)) && (
           <button onClick={() => setActiveTab('channel-settings')} className={`mx-3 mb-4 flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-xs font-semibold ${activeTab === 'channel-settings' ? 'border-emerald-500 text-emerald-400 bg-emerald-500/10' : 'border-slate-700 text-slate-300 hover:border-emerald-500'}`}>
-            <Settings2 size={15} aria-hidden="true" /> Channel management
+            <Settings2 size={15} aria-hidden="true" /> {isProjectOwner ? 'Workspace management' : 'Channel recruitment'}
           </button>
         )}
         {/* Channels */}
@@ -118,7 +118,7 @@ export const Sidebar: React.FC = () => {
             <button
               onClick={() => setIsChannelModalOpen(true)}
               className="p-1 -mt-1.5 rounded text-slate-500 hover:text-emerald-500 hover:bg-slate-800 transition-colors cursor-pointer"
-              disabled={isChannelGuest}
+              disabled={!isProjectOwner}
               title="New channel"
             >
               <Plus className="w-4 h-4" />
