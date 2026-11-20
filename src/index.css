@@ -490,3 +490,99 @@ input, textarea, select { accent-color: #bca6db; }
 .lift:hover { border-color: color-mix(in srgb, var(--color-emerald-500) 45%, transparent) !important; box-shadow: 0 8px 28px -16px color-mix(in srgb, var(--color-emerald-500) 28%, transparent); }
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline-color: var(--color-emerald-400); }
 @media (max-width: 760px) { .workspace-brand-logo { width: 142px; } .workspace-identity-caption { display: none; } }
+
+/* A persistent connection illustration welcomes people before sign-in. */
+.auth-layout { min-height: 100svh; background: #090b15; }
+.auth-welcome { background: radial-gradient(ellipse at 48% 45%, #37244055, transparent 72%), #0d0e1b; gap: 24px; }
+.connection-loader--welcome { flex: 1; min-height: 0; padding: 0; overflow: visible; background: transparent; justify-content: center; }
+.connection-loader--welcome .connection-art { width: 100%; max-width: 680px; height: auto; aspect-ratio: 640 / 440; }
+.connection-loader--welcome .connection-caption { margin-top: 4px; padding-inline: 8px; }
+.connection-loader--welcome .connection-caption h1 { font-size: clamp(28px, 3vw, 42px); margin-top: 16px; }
+.connection-loader--welcome .connection-description { max-width: 340px; margin: 12px auto 0; line-height: 1.7; color: #afa1bf; }
+.auth-welcome-footer { text-align: center; font-size: 11px; color: #8d7f9d; letter-spacing: .04em; }
+.auth-signin {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 100svh;
+  background:
+    radial-gradient(ellipse at 80% 18%, #61428c30, transparent 48%),
+    radial-gradient(ellipse at 12% 84%, #36336b44, transparent 55%),
+    linear-gradient(145deg, #080a16, #151020 64%, #090b18);
+}
+.auth-signin::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: .65;
+  background-image:
+    radial-gradient(1px 1px at 8% 11%, #dfd4fa, transparent),
+    radial-gradient(1px 1px at 22% 6%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 43% 17%, #d7c9f2, transparent),
+    radial-gradient(1px 1px at 67% 8%, #fff, transparent),
+    radial-gradient(2px 2px at 89% 24%, #cbb9e9, transparent),
+    radial-gradient(1px 1px at 74% 32%, #fff, transparent),
+    radial-gradient(1px 1px at 15% 29%, #d8c6ef, transparent),
+    radial-gradient(1.5px 1.5px at 31% 38%, #fff, transparent),
+    radial-gradient(1px 1px at 94% 47%, #e0d5f4, transparent),
+    radial-gradient(1px 1px at 5% 53%, #fff, transparent),
+    radial-gradient(1px 1px at 18% 67%, #c4b2e0, transparent),
+    radial-gradient(1.5px 1.5px at 83% 61%, #fff, transparent),
+    radial-gradient(1px 1px at 68% 77%, #cfc6f7, transparent),
+    radial-gradient(2px 2px at 36% 86%, #d8c6ef, transparent),
+    radial-gradient(1px 1px at 9% 92%, #fff, transparent),
+    radial-gradient(1px 1px at 58% 94%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 91% 89%, #d4bfe8, transparent);
+  animation: auth-starlight 9s ease-in-out infinite alternate;
+}
+.auth-signin::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 84% 28%, #b98ad416, transparent 32%), radial-gradient(ellipse at 26% 74%, #8b80b817, transparent 40%);
+}
+@keyframes auth-starlight { from { opacity: .4; } to { opacity: .8; } }
+@media (prefers-reduced-motion: reduce) { .auth-signin::before { animation: none; } }
+.auth-signin-card {
+  z-index: 1;
+  max-width: 340px;
+  border-color: #c6afd51a;
+  background: linear-gradient(155deg, #14121fe8, #0c0d18ed);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 16px 50px #0002;
+}
+.auth-signin-card h2 { font-family: Baskerville, 'Palatino Linotype', Georgia, serif; font-weight: 400; font-size: 30px; letter-spacing: -.025em; margin-top: 12px; }
+@media (max-height: 650px) and (min-width: 1024px) {
+  .auth-welcome { padding-block: 24px; gap: 12px; }
+  .connection-loader--welcome .connection-art { max-height: 40vh; }
+  .connection-loader--welcome .connection-caption h1 { font-size: 28px; }
+}
+
+@media (min-width: 1024px) {
+  .auth-welcome { width: 65%; flex: 0 0 65%; }
+  .auth-signin { flex: 1 1 35%; min-width: 0; padding-inline: 24px; }
+}
+
+.connection-art { position: relative; }
+.connection-hub-logo { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 25%; pointer-events: none; }
+.connection-hub-logo .sermona-logo { width: 100%; }
+
+/* Blend the centered artwork against the connection hub instead of an isolated black layer. */
+.connection-hub-logo { width: 33%; mix-blend-mode: screen; }
+.connection-hub-logo .sermona-logo img { mix-blend-mode: normal; }
+.auth-welcome { justify-content: center; }
+.connection-loader--welcome { flex: 0 1 auto; width: 100%; }
+
+/* Give the welcome network the available left-panel space. */
+@media (min-width: 1024px) {
+  .auth-welcome { padding: 20px 18px; }
+  .connection-loader--welcome { flex: 1; }
+  .connection-loader--welcome .connection-art { width: min(100%, calc(76vh * 1.454545)); max-width: 880px; height: auto; max-height: none; aspect-ratio: 640 / 440; }
+}
+@media (max-height: 650px) and (min-width: 1024px) {
+  .connection-loader--welcome .connection-art { width: min(100%, calc(72vh * 1.454545)); height: auto; max-height: none; }
+}

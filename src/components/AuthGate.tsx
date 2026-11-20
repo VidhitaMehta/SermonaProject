@@ -1,7 +1,6 @@
 import React, { ReactNode } from 'react';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { ShieldCheck, ChevronRight, FileCheck2, Crosshair } from 'lucide-react';
-import { Insignia } from './Insignia';
+import { ShieldCheck } from 'lucide-react';
 import { ConnectionLoader } from './ConnectionLoader';
 import { SermonaLogo } from './SermonaLogo';
 
@@ -12,36 +11,6 @@ const GoogleIcon = () => (
     <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z" />
     <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
   </svg>
-);
-
-/** "Live feed" preview on the left of the login page: chat → decision → mission. */
-const FeedPreview: React.FC = () => (
-  <div className="space-y-3 max-w-md">
-    <div className="rounded-lg border border-slate-750 bg-slate-900/80 p-3.5 animate-fade-up">
-      <div className="term text-[10px] text-slate-500 flex items-center gap-1.5">
-        <ChevronRight className="w-3 h-3 text-emerald-500" /> #design · 21:04
-      </div>
-      <p className="text-sm text-slate-200 mt-1">
-        <span className="font-semibold text-slate-100">Riya:</span> Let's lock the dark theme. Aman, can you ship the login screen by Friday?
-      </p>
-    </div>
-    <div className="ml-8 rounded-lg border border-signal/40 bg-slate-900/80 p-3 animate-fade-up [animation-delay:150ms]">
-      <div className="term text-[10px] text-signal flex items-center gap-1.5">
-        <FileCheck2 className="w-3 h-3" /> DECISION LOGGED
-      </div>
-      <p className="text-sm font-semibold text-slate-100 mt-0.5">Use the dark theme</p>
-    </div>
-    <div className="ml-16 relative overflow-hidden rounded-lg border border-emerald-500/50 bg-slate-900/80 p-3 animate-fade-up [animation-delay:300ms]">
-      <div className="hazard absolute left-0 top-0 bottom-0 w-1" />
-      <div className="flex items-center justify-between">
-        <span className="term text-[10px] text-emerald-500 flex items-center gap-1.5">
-          <Crosshair className="w-3 h-3" /> MISSION · AMAN
-        </span>
-        <span className="term text-[10px] px-1.5 py-0.5 rounded-sm border border-amber-500/50 text-amber-400">DUE FRI</span>
-      </div>
-      <p className="text-sm font-semibold text-slate-100 mt-0.5">Ship the login screen</p>
-    </div>
-  </div>
 );
 
 /**
@@ -78,39 +47,21 @@ export const AuthGate: React.FC<{ children: ReactNode }> = ({ children }) => {
   if (!isSignedIn) {
     const domains = allowedEmailDomains.map((d) => `@${d}`).join(' or ');
     return (
-      <div className="min-h-screen w-screen flex font-sans">
-        {/* Left: brand + live feed */}
-        <div className="hidden lg:flex relative w-[55%] flex-col justify-between p-12 border-r border-slate-800">
-          <SermonaLogo className="auth-sermona-logo" />
-
-          <div className="space-y-10">
-            <div>
-              <div className="term text-[11px] uppercase tracking-[0.25em] text-emerald-500">// talk → understand → organize → execute</div>
-              <h1 className="text-5xl font-extrabold leading-[1.05] tracking-tight text-slate-100 mt-4 max-w-xl">
-                Every conversation
-                <br />
-                becomes a <span className="text-emerald-500">mission</span>.
-              </h1>
-              <p className="text-slate-400 mt-4 max-w-md">
-                Chat with your squad. Sermona logs the decisions, assigns the tasks and tracks every deadline — automatically.
-              </p>
-            </div>
-            <FeedPreview />
-          </div>
-
-          <div className="term text-[10px] text-slate-600 tracking-[0.2em]">SYS.STATUS: <span className="text-signal">ONLINE</span></div>
+      <div className="auth-layout min-h-screen w-full flex font-sans">
+        <div className="auth-welcome hidden lg:flex relative w-[55%] flex-col justify-between p-10 xl:p-12 border-r border-slate-800">
+          <ConnectionLoader variant="welcome" />
         </div>
 
         {/* Right: sign in */}
-        <div className="flex-1 flex items-center justify-center p-6">
-          <div className="hud relative w-full max-w-sm rounded-xl border border-slate-750 bg-slate-900/90 p-8 animate-fade-up">
+        <div className="auth-signin flex-1 flex items-center justify-center p-6 lg:p-10">
+          <div className="auth-signin-card relative w-full max-w-sm rounded-xl border border-slate-800 p-7 animate-fade-up">
             <div className="lg:hidden flex items-center gap-3 mb-8">
               <SermonaLogo className="auth-sermona-logo" />
             </div>
 
-            <div className="term text-[10px] uppercase tracking-[0.25em] text-emerald-500">// access terminal</div>
-            <h2 className="text-2xl font-extrabold text-slate-100 mt-1">Identify yourself</h2>
-            <p className="text-sm text-slate-500 mt-1.5">Sign in to reach your workspaces.</p>
+            <div className="term text-[10px] uppercase tracking-[0.25em] text-emerald-500">Your shared workspace</div>
+            <h2 className="text-2xl font-extrabold text-slate-100 mt-1">Welcome to Sermona</h2>
+            <p className="text-sm text-slate-500 mt-1.5">Sign in with your Google account to continue.</p>
 
             <button
               onClick={signInWithGoogle}
@@ -124,13 +75,13 @@ export const AuthGate: React.FC<{ children: ReactNode }> = ({ children }) => {
               <div className="mt-4 flex items-start gap-2.5 p-3 rounded-md border border-emerald-500/30 bg-emerald-950 text-xs text-slate-300">
                 <ShieldCheck className="w-4 h-4 flex-shrink-0 mt-px text-emerald-500" />
                 <span>
-                  Clearance restricted to <span className="term font-bold text-emerald-500">{domains}</span> accounts.
+                  Use your <span className="term font-bold text-emerald-500">{domains}</span> account.
                 </span>
               </div>
             )}
 
             <p className="text-xs text-slate-500 mt-6 leading-relaxed">
-              Got an invite link? Open it and sign in — you'll join that workspace automatically.
+              Joining a team? Open your invite link and sign in to access your invited channels.
             </p>
           </div>
         </div>

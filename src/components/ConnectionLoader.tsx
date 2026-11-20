@@ -13,11 +13,12 @@ const PEOPLE = [
 ];
 
 /** Decorative people and signal waves accompany the actual authentication state. */
-export const ConnectionLoader: React.FC = () => {
+export const ConnectionLoader: React.FC<{ variant?: 'loading' | 'welcome' }> = ({ variant = 'loading' }) => {
+  const welcoming = variant === 'welcome';
   const id = useId().replace(/:/g, '');
   return (
-    <section className="connection-loader" role="status" aria-live="polite" aria-label="Establishing link. Connecting to your workspace.">
-      <div className="connection-brand"><SermonaLogo /></div>
+    <section className={`connection-loader${welcoming ? ' connection-loader--welcome' : ''}`} role={welcoming ? undefined : 'status'} aria-live={welcoming ? undefined : 'polite'} aria-label={welcoming ? undefined : 'Establishing link. Connecting to your workspace.'}>
+      {!welcoming && <div className="connection-brand"><SermonaLogo /></div>}
       <div className="connection-art" aria-hidden="true">
         <svg viewBox="0 0 640 440" fill="none" focusable="false">
           <defs>
@@ -70,17 +71,18 @@ export const ConnectionLoader: React.FC = () => {
             </g>
           ))}
           <g className="connection-monogram">
-            <circle cx="320" cy="220" r="62" stroke="#c8afdf" strokeOpacity=".15" />
-            <circle cx="320" cy="220" r="55" fill={`url(#${id}-pearl)`} stroke="#bca6db" strokeOpacity=".45" />
-            <circle cx="320" cy="220" r="48" stroke="#afa0c4" strokeOpacity=".25" />
-            <text x="320" y="244" fill={`url(#${id}-monogram)`} fontFamily="Baskerville, 'Palatino Linotype', Georgia, serif" fontSize="76" textAnchor="middle">S</text>
+            <circle cx="320" cy="220" r={welcoming ? 122 : 62} stroke="#c8afdf" strokeOpacity=".15" />
+            <circle cx="320" cy="220" r={welcoming ? 114 : 55} fill={welcoming ? '#171323' : `url(#${id}-pearl)`} fillOpacity={welcoming ? .78 : 1} stroke="#bca6db" strokeOpacity=".45" />
+            <circle cx="320" cy="220" r={welcoming ? 106 : 48} stroke="#afa0c4" strokeOpacity=".25" />
+            {!welcoming && <text x="320" y="244" fill={`url(#${id}-monogram)`} fontFamily="Baskerville, 'Palatino Linotype', Georgia, serif" fontSize="76" textAnchor="middle">S</text>}
           </g>
         </svg>
+        {welcoming && <div className="connection-hub-logo"><SermonaLogo /></div>}
       </div>
-      <div className="connection-caption" aria-hidden="true">
-        <p className="connection-eyebrow"><span /> Establishing link<span className="connection-ellipsis">…</span></p>
-        <h1>Bringing your people together.</h1>
-        <p className="connection-description">Connecting to your workspace</p>
+      <div className="connection-caption" aria-hidden={welcoming ? undefined : true}>
+        <p className="connection-eyebrow" hidden={welcoming}><span /> Establishing link<span className="connection-ellipsis">…</span></p>
+        <h1>{welcoming ? 'Your people, connected.' : 'Bringing your people together.'}</h1>
+        {!welcoming && <p className="connection-description">Connecting to your workspace</p>}
       </div>
     </section>
   );
