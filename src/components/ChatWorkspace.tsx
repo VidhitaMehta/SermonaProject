@@ -1,5 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Portal } from './Portal';
+import { AvengerEmblem, AvengersBanner, heroStyle } from './AvengersIdentity';
+import { FantasyEmblem, FantasyBanner, fantasyStyle } from './FantasyIdentity';
+import { ChannelAtmosphere } from './ChannelAtmosphere';
 import { CHARACTERS, getChannelIdentity } from '../data/channelIdentities';
 import { getChannelTheme } from '../data/channelThemes';
 import { useWorkspace } from '../context/WorkspaceContext';
@@ -114,6 +117,11 @@ export const ChatWorkspace: React.FC = () => {
   const identityFor = (memberId: string) =>
     getChannelIdentity(theme?.id, memberId, theme ? characterChoices.get(memberId)?.[theme.id] : undefined);
   const myIdentity = identityFor(currentUser.id);
+  const isAvengers = theme?.id === 'avengers';
+  const fantasyTheme = theme?.id === 'pokemon' || theme?.id === 'harry-potter' ? theme.id : null;
+  const hasCharacterVisuals = isAvengers || Boolean(fantasyTheme);
+  const characterStyle = (handle?: string) => isAvengers ? heroStyle(handle) : fantasyTheme ? fantasyStyle(fantasyTheme, handle) : undefined;
+  const characterEmblem = (handle: string) => isAvengers ? <AvengerEmblem handle={handle}/> : fantasyTheme ? <FantasyEmblem theme={fantasyTheme} handle={handle}/> : null;
   const adminId = channel ? getChannelAdminId(channel) : '';
   const canChangeTheme = Boolean(channel && adminId === currentUser.id);
   const currentMessages = messages[activeChannelId] || [];
@@ -207,7 +215,8 @@ export const ChatWorkspace: React.FC = () => {
   ];
 
   return (
-    <div className="channel-chat flex-1 min-w-0 flex flex-col h-full bg-slate-900 overflow-hidden relative">
+    <div style={characterStyle(myIdentity?.handle)} className="channel-chat flex-1 min-w-0 flex flex-col h-full bg-slate-900 overflow-hidden relative">
+      {fantasyTheme && <ChannelAtmosphere theme={fantasyTheme}/>}
       {/* Channel Header Bar */}
       <div className="min-h-14 py-2 px-3 sm:px-5 flex-wrap border-b border-slate-800 flex items-center justify-between gap-4 bg-slate-950/70 backdrop-blur-sm z-10 flex-shrink-0">
         <div className="flex items-center gap-3 min-w-0">
@@ -275,7 +284,7 @@ export const ChatWorkspace: React.FC = () => {
       {/* Message List */}
       <div className="channel-messages flex-1 overflow-y-auto px-5 py-4 space-y-4">
         {/* Welcome Message Card */}
-        <div className="channel-welcome p-4 rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950/30 border border-slate-800/80 mb-6">
+        {isAvengers && myIdentity ? <AvengersBanner handle={myIdentity.handle} name={myIdentity.name} channel={channel?.name} topic={channel?.topic}/> : fantasyTheme && myIdentity ? <FantasyBanner theme={fantasyTheme} handle={myIdentity.handle} name={myIdentity.name} channel={channel?.name} topic={channel?.topic}/> : <div className="channel-welcome p-4 rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950/30 border border-slate-800/80 mb-6">
           <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 flex-shrink-0">
               <Hash className="w-5 h-5" />
@@ -293,7 +302,7 @@ export const ChatWorkspace: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
+        </div>}
 
         {searchQuery && (
           <div className="text-xs text-slate-400 pb-2 border-b border-slate-800 flex items-center justify-between">
@@ -325,6 +334,8 @@ export const ChatWorkspace: React.FC = () => {
               <SwipeToReply key={msg.id} onReply={() => startReply(msg)}>
               <div
                 id={`msg-${msg.id}`}
+                data-avenger={hasCharacterVisuals ? identity?.handle : undefined}
+                style={characterStyle(identity?.handle)}
                  className={`group animate-pop-in flex items-start gap-3.5 p-2 rounded-2xl transition-colors relative hover:bg-slate-850 ${
                   isDecisionMention ? 'bg-emerald-500/5 border border-emerald-500/20' : ''
                 } ${mentionsMe ? 'border-l-2 border-amber-400 bg-amber-500/5' : ''} ${
@@ -332,21 +343,21 @@ export const ChatWorkspace: React.FC = () => {
                 }`}
               >
                 {/* Sender Avatar */}
-                <img
+                {hasCharacterVisuals && identity ? <div className="hero-avatar" title={`${identity.name} · ${msg.senderName}`}>{characterEmblem(identity.handle)}</div> : <img
                   src={msg.senderAvatar}
                   alt={msg.senderName}
                   className="w-9 h-9 rounded-full object-cover flex-shrink-0 border border-slate-700 mt-0.5"
-                />
+                />}
 
                 {/* Message Body */}
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-1">
-                    <span className="text-xs font-bold text-slate-200">
+                    <span className="hero-sender text-xs font-bold text-slate-200">
                       {identity?.username ?? msg.senderName}
                     </span>
                     {identity && (
                       <span className="text-[10px] text-slate-400">
-                        <span aria-hidden="true">{identity.symbol} </span>{identity.name} · {msg.senderName}
+                        <span aria-hidden="true">{!hasCharacterVisuals && `${identity.symbol} `}</span>{identity.name} · {msg.senderName}
                       </span>
                     )}
                     <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700/60">
@@ -499,8 +510,8 @@ export const ChatWorkspace: React.FC = () => {
       <div className="p-4 bg-slate-950/90 border-t border-slate-800">
         {theme && myIdentity && (
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-            <p>
-              <span aria-hidden="true">{myIdentity.symbol} </span>
+            <p className="hero-posting">
+              {hasCharacterVisuals ? characterEmblem(myIdentity.handle) : <span aria-hidden="true">{myIdentity.symbol} </span>}
               Posting as <strong className="text-emerald-400">{myIdentity.username}</strong>
             </p>
             <label className="flex items-center gap-2">

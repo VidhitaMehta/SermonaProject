@@ -64,6 +64,7 @@ export const AIPanel: React.FC = () => {
     isAnalyzing,
     autoAnalyzingChannel,
     analyzeCurrentChannel,
+    refreshCurrentChannel,
     approveProposedTask,
     rejectProposedTask,
     editProposedTask,
@@ -206,6 +207,14 @@ export const AIPanel: React.FC = () => {
         {/* Structured Results Sections */}
         {currentAnalysis && (
           <>
+            {currentAnalysis.fromBackgroundCache && (
+              <div className="space-y-2 rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3 text-[11px] text-slate-300">
+                <p className="font-semibold text-emerald-400">Saved background analysis</p>
+                <p>{currentAnalysis.messageCount} messages analysed{currentAnalysis.cacheGeneratedAt ? ' · Saved ' + new Date(currentAnalysis.cacheGeneratedAt).toLocaleString() : ''}.</p>
+                {(currentAnalysis.pendingMessageCount || 0) > 0 && <p>{currentAnalysis.pendingMessageCount} newer messages were pending when you opened this result.</p>}
+                <button type="button" disabled={isAnalyzing} onClick={refreshCurrentChannel} className="font-semibold text-emerald-400 underline disabled:opacity-50">Analyse latest messages</button>
+              </div>
+            )}
             {currentAnalysis.mode === 'basic' && (
               <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-200 flex items-start gap-2">
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
@@ -213,7 +222,7 @@ export const AIPanel: React.FC = () => {
                   <span className="font-semibold">Saved result · Basic mode — not AI.</span>{' '}
                   {currentAnalysis.notice ||
                     'Results come from simple keyword rules.'}
-                  <button type="button" onClick={() => analyzeCurrentChannel()} disabled={isAnalyzing} className="mt-2 block font-semibold underline disabled:opacity-50">Run analysis again</button>
+                  <button type="button" onClick={refreshCurrentChannel} disabled={isAnalyzing} className="mt-2 block font-semibold underline disabled:opacity-50">Run analysis again</button>
                 </span>
               </div>
             )}

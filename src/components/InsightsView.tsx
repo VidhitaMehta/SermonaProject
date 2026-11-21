@@ -55,7 +55,7 @@ export const InsightsView: React.FC = () => {
   ];
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-900 overflow-y-auto">
+    <div className="intel-cosmos flex-1 flex flex-col h-full bg-slate-900 overflow-y-auto">
       {/* Header */}
       <div className="p-6 border-b border-slate-800 bg-slate-950/50 flex-shrink-0">
         <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2.5">
@@ -67,9 +67,9 @@ export const InsightsView: React.FC = () => {
         </p>
       </div>
 
-      <div className="p-6 space-y-6 max-w-5xl mx-auto w-full">
+      <div className="intel-system p-6 space-y-6 max-w-5xl mx-auto w-full">
         {/* Core Workflow Stepper Card */}
-        <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950/40 border border-emerald-500/30 shadow-xl space-y-4">
+        <div className="intel-pipeline p-5 rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950/40 border border-emerald-500/30 shadow-xl space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
               <Zap className="w-4 h-4 text-emerald-400" />
@@ -80,12 +80,15 @@ export const InsightsView: React.FC = () => {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <div className="intel-orbit-grid grid grid-cols-1 md:grid-cols-5 gap-3">
+            <svg className="intel-connections" viewBox="0 0 1000 240" preserveAspectRatio="none" aria-hidden="true"><path d="M90 95Q200 8 300 95T500 95T700 95T910 95"/><path d="M90 95Q200 8 300 95T500 95T700 95T910 95" className="intel-signal"/></svg>
             {workflowSteps.map((ws, i) => (
               <div
                 key={i}
-                className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2 flex flex-col justify-between"
+                style={{ '--orbit-delay': `${i * -1.3}s`, '--planet-color': ['#bdabea', '#8ecbd9', '#ddbda0', '#a3d2be', '#c8acf2'][i] } as React.CSSProperties}
+                className="intel-planet-card p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2 flex flex-col justify-between"
               >
+                <div className="intel-planet" aria-hidden="true"><i/><span/></div>
                 <div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-emerald-400">{ws.step}</span>
@@ -107,7 +110,7 @@ export const InsightsView: React.FC = () => {
         </div>
 
         {/* Analytics Breakdown Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="intel-metrics grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Card 1: Conversion Metric */}
           <div className="p-5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
             <div className="flex items-center justify-between text-xs font-bold text-slate-300">
@@ -150,32 +153,7 @@ export const InsightsView: React.FC = () => {
           </div>
         </div>
 
-        {/* Technical Domain Knowledge & Tags */}
-        <div className="p-5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
-          <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-            Machine Learning Capstone Concepts Identified
-          </h3>
-          <div className="flex flex-wrap gap-2 pt-1">
-            {[
-              'Random Forest (150 estimators)',
-              'SVM (RBF kernel)',
-              '0.912 ROC-AUC',
-              'TreeSHAP Feature Importances',
-              'MICE Iterative Imputation',
-              'Stratified 80/20 Train-Test Split',
-              'Plotly Interactive Confusion Matrix',
-              '10-Slide Pitch Storyline',
-              'Room 304 Timed Dry Run',
-            ].map((tag, i) => (
-              <span
-                key={i}
-                className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs font-medium text-emerald-300"
-              >
-                #{tag}
-              </span>
-            ))}
-          </div>
-        </div>
+
       </div>
     </div>
   );

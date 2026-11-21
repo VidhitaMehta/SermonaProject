@@ -143,6 +143,7 @@ interface WorkspaceContextType {
   analyzeCurrentChannel: (opts?: { silent?: boolean }) => Promise<void>;
   /** Channel id currently being analyzed silently in the background, if any */
   autoAnalyzingChannel: string | null;
+  refreshCurrentChannel: () => Promise<void>;
 
   // Proposed Tasks Review Actions (Approve, Edit, Reject)
   approveProposedTask: (taskId: string) => void;
@@ -459,7 +460,10 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     return teamMembers.find((m) => m.id === localUserId) || teamMembers[0] || CURRENT_USER;
   }, [authUser, teamMembers, localUserId]);
 
-  const currentAnalysis = analyses[activeChannelId] || null;
+  const [visibleAnalyses, setVisibleAnalyses] = useState<Record<string, AIAnalysisResult>>({});
+  const preparedResults = useRef<Record<string, AIAnalysisResult>>({});
+  useEffect(() => { setVisibleAnalyses({}); preparedResults.current = {}; }, [cloudProjectId]);
+  const currentAnalysis = visibleAnalyses[activeChannelId] || null;
   const activeChannelAvailable = channels.some((channel) => channel.id === activeChannelId);
 
   const workspaceReady = IS_CLOUD
@@ -1028,7 +1032,13 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   };
 
-  const setAnalysisFor = (channelId: string, next: AIAnalysisResult | null) => {
+  const setAnalysisFor = (channelId: string, next: AIAnalysisResult | null, reveal = true) => {
+    if (reveal) setVisibleAnalyses((previous) => {
+      const updated = { ...previous };
+      if (next) updated[channelId] = next;
+      else delete updated[channelId];
+      return updated;
+    });
     setAnalyses((prev) => {
       const copy = { ...prev };
       if (next) copy[channelId] = next;
@@ -1222,8 +1232,8 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   // ---------- AI analysis ----------
-  const analyzeCurrentChannel = async (opts?: { silent?: boolean }) => {
-    const silent = Boolean(opts && (opts as { silent?: boolean }).silent === true); // onClick passes an event, not opts
+  const runChannelAnalysis = async (forceRefresh: boolean, opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
     const channelId = activeChannelId; // capture: user may switch channels while this runs
     const channel = channels.find((c) => c.id === channelId);
     const channelMsgs = messages[channelId] || [];
@@ -1245,6 +1255,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         setIsAnalyzing(true);
         await running.catch(() => {});
         setIsAnalyzing(false);
+        return runChannelAnalysis(forceRefresh, opts);
       }
       return;
     }
@@ -1262,40 +1273,72 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     const clientTimeout = setTimeout(() => controller.abort(), 45_000);
 
     try {
-      const response = await fetch('/api/analyze-conversation', {
-        method: 'POST',
-        signal: controller.signal,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: project.id,
-          channelId,
-          channelName: channel?.name || 'general',
-          messages: channelMsgs.map((m) => ({
-            id: m.id,
-            senderId: m.senderId,
-            senderName: m.senderName,
-            senderRole: m.senderRole,
-            replyToId: m.replyTo?.messageId || null,
-            content: m.content,
-            timestamp: m.timestamp,
-          })),
-          workspaceMembers: teamMembers.map((tm) => ({
-            id: tm.id,
-            name: tm.name,
-            role: tm.role,
-            skills: tm.skills || [],
-          })),
-          existingTasks: tasks.map((t) => ({ id: t.id, title: t.title, status: t.status })),
-          existingDecisions: decisions.map((d) => ({ id: d.id, title: d.title, status: d.status })),
-        }),
-      });
-
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || `Server responded with ${response.status}`);
+      let raw: AIAnalysisResult | null = null;
+      if (silent && IS_CLOUD && db && cloudProjectId) {
+        try {
+          const worker = await getDoc(doc(db, 'projects', cloudProjectId, 'backgroundAnalysisStatus', channelId));
+          if (worker.exists() && worker.data().status !== 'failed') return;
+        } catch { /* The browser path also works when optional server jobs are not deployed. */ }
       }
+      if (!forceRefresh && !silent) {
+        const prepared = preparedResults.current[channelId] || (analyses[channelId]?.preparedInBackground ? analyses[channelId] : null);
+        if (prepared) raw = { ...prepared, fromBackgroundCache: true, cacheGeneratedAt: prepared.analyzedAt, pendingMessageCount: Math.max(0, channelMsgs.length - prepared.messageCount) };
+      }
+      if (IS_CLOUD && db && cloudProjectId && !forceRefresh && !silent) {
+        try {
+          const [cached, status] = await Promise.all([
+            getDoc(doc(db, 'projects', cloudProjectId, 'backgroundAnalyses', channelId)),
+            getDoc(doc(db, 'projects', cloudProjectId, 'backgroundAnalysisStatus', channelId)),
+          ]);
+          if (cached.exists() && cached.data().result?.mode === 'ai' && (!raw || new Date(cached.data().generatedAt).getTime() > new Date(raw.analyzedAt).getTime())) {
+            raw = {
+              ...cached.data().result,
+              fromBackgroundCache: true,
+              cacheGeneratedAt: cached.data().generatedAt,
+              pendingMessageCount: status.data()?.pendingMessages || 0,
+            } as AIAnalysisResult;
+          }
+        } catch (error) {
+          // Manual analysis remains available before the background service is deployed.
+          console.warn('Background cache unavailable; requesting manual analysis.', error);
+        }
+      }
+      if (!raw) {
+        const response = await fetch('/api/analyze-conversation', {
+          method: 'POST',
+          signal: controller.signal,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId: project.id,
+            channelId,
+            channelName: channel?.name || 'general',
+            messages: channelMsgs.map((m) => ({
+              id: m.id,
+              senderId: m.senderId,
+              senderName: m.senderName,
+              senderRole: m.senderRole,
+              replyToId: m.replyTo?.messageId || null,
+              content: m.content,
+              timestamp: m.timestamp,
+            })),
+            workspaceMembers: teamMembers.map((tm) => ({
+              id: tm.id,
+              name: tm.name,
+              role: tm.role,
+              skills: tm.skills || [],
+            })),
+            existingTasks: tasks.map((t) => ({ id: t.id, title: t.title, status: t.status })),
+            existingDecisions: decisions.map((d) => ({ id: d.id, title: d.title, status: d.status })),
+          }),
+        });
 
-      const raw: AIAnalysisResult = await response.json();
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || `Server responded with ${response.status}`);
+        }
+
+        raw = await response.json() as AIAnalysisResult;
+      }
       // Give every extracted item an id that is unique across channels and re-runs.
       // Gemini / basic mode reuse ids like "dec_1" or "dec_basic_0_0", which made
       // confirming a decision in one channel overwrite a decision from another.
@@ -1315,16 +1358,15 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       };
       // Keep what the team already reviewed (edits, ticks, confirmations, owners, rejections)
       const data = mergeAnalysis(analyses[channelId] || null, fresh, tasks, decisions);
-      // A background run that only got keyword results shouldn't replace a real AI result
       if (silent && data.mode === 'basic' && analyses[channelId]?.mode === 'ai') return;
-      setAnalysisFor(channelId, { ...data, channelId, analyzedAt: new Date().toISOString(), messageCount: channelMsgs.length });
-
-      if (!silent)
-        addToast({
-          type: data.mode === 'basic' ? 'warning' : 'success',
-          title: data.mode === 'basic' ? 'Basic analysis (no AI)' : 'Intelligence generated',
-          message: `Extracted ${data.decisions.length} decisions, ${data.proposedTasks.length} tasks, and ${data.unresolvedQuestions.length} open questions from #${channel?.name}.`,
-        });
+      const result = { ...data, channelId, analyzedAt: data.analyzedAt || new Date().toISOString() };
+      preparedResults.current[channelId] = result;
+      setAnalysisFor(channelId, { ...result, preparedInBackground: silent }, !silent);
+      if (!silent) addToast({
+        type: data.mode === 'basic' ? 'warning' : 'success',
+        title: data.fromBackgroundCache ? 'Saved analysis ready' : data.mode === 'basic' ? 'Basic analysis (no AI)' : 'Intelligence generated',
+        message: `Extracted ${data.decisions.length} decisions, ${data.proposedTasks.length} tasks, and ${data.unresolvedQuestions.length} open questions from #${channel?.name}.`,
+      });
     } catch (err: any) {
       console.error('Conversation analysis error:', err);
       if (!silent) {
@@ -1340,6 +1382,9 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       else setIsAnalyzing(false);
     }
   };
+
+  const analyzeCurrentChannel = (opts?: { silent?: boolean }) => runChannelAnalysis(false, opts);
+  const refreshCurrentChannel = () => runChannelAnalysis(true);
 
   // ---------- background auto-analysis ----------
   // While a channel is open, re-analyze it quietly once the chat goes quiet for a bit,
@@ -2007,6 +2052,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         addReaction,
         analyzeCurrentChannel,
         autoAnalyzingChannel,
+        refreshCurrentChannel,
         approveProposedTask,
         rejectProposedTask,
         editProposedTask,

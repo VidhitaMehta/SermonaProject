@@ -586,3 +586,190 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 @media (max-height: 650px) and (min-width: 1024px) {
   .connection-loader--welcome .connection-art { width: min(100%, calc(72vh * 1.454545)); height: auto; max-height: none; }
 }
+/* Cinematic Avengers surfaces; character selection supplies the energy palette. */
+[data-channel-theme="avengers"] .channel-chat {
+  --color-emerald-400: var(--hero-accent, #83edff);
+  --color-emerald-500: var(--hero-accent, #83edff);
+  --color-teal-500: var(--hero-secondary, #d79a43);
+  --color-teal-400: var(--hero-secondary, #d79a43);
+  background: #0b111b;
+}
+[data-channel-theme="avengers"] .channel-messages {
+  background-image: radial-gradient(ellipse at 90% 0%, color-mix(in srgb, var(--hero-accent) 7%, transparent), transparent 55%), linear-gradient(110deg, #111d2a55, transparent);
+  background-size: auto;
+}
+.avengers-banner { isolation:isolate; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:space-between; gap:20px; min-height:220px; padding:32px; margin-bottom:28px; border:1px solid #52627466; border-radius:18px; background:linear-gradient(115deg,#101b29 10%,#111b27d9 60%,#172432),repeating-linear-gradient(120deg,transparent 0 30px,#fff1 31px 32px); box-shadow:inset 0 1px #a5bbc41a,0 15px 40px #0003; }
+.avengers-banner::before { content:''; position:absolute; z-index:-1; inset:0; background:repeating-linear-gradient(0deg,transparent 0 5px,#ffffff03 6px),linear-gradient(110deg,transparent 40%,color-mix(in srgb,var(--hero-accent) 10%,transparent)); }
+.avengers-banner::after { content:''; position:absolute; left:0; top:25%; bottom:25%; width:3px; background:var(--hero-accent); box-shadow:0 0 22px var(--hero-accent); }
+.avengers-banner-copy { position:relative; z-index:1; min-width:0; }
+.hero-eyebrow { font:10px/1.6 monospace; letter-spacing:.25em; color:var(--hero-accent); margin-bottom:12px; }
+.avengers-banner h2 { color:#f1f5fc; font-size:clamp(22px,3vw,34px); font-weight:700; letter-spacing:-.04em; overflow-wrap:anywhere; }
+.hero-topic { color:#acbacb; font-size:12px; line-height:1.7; margin-top:8px; max-width:390px; }
+.hero-signature { display:flex; flex-wrap:wrap; align-items:center; gap:9px; margin-top:22px; font-size:11px; color:var(--hero-accent); }
+.hero-signature > span:first-child { width:5px; height:5px; border-radius:50%; background:currentColor; box-shadow:0 0 12px currentColor; }
+.hero-element { color:#a0afc1; border-left:1px solid #526274; padding-left:9px; }
+.hero-display { position:relative; flex:0 0 150px; color:var(--hero-accent); filter:drop-shadow(0 0 18px color-mix(in srgb,var(--hero-accent) 30%,transparent)); animation:hero-breathe 5s ease-in-out infinite; }
+.avenger-emblem { display:block; width:100%; height:100%; color:var(--hero-accent); }
+.hero-orbit { position:absolute; right:-55px; top:50%; width:330px; height:330px; margin-top:-165px; border:1px solid color-mix(in srgb,var(--hero-accent) 18%,transparent); border-radius:50%; border-top-color:var(--hero-accent); animation:hero-orbit 24s linear infinite; opacity:.5; }
+.hero-orbit::after { content:''; position:absolute; inset:16px; border:1px dashed var(--hero-accent); border-radius:50%; opacity:.2; }
+.hero-energy { position:absolute; right:-30px; top:-60px; width:330px; height:330px; border-radius:50%; background:radial-gradient(circle,color-mix(in srgb,var(--hero-accent) 13%,transparent),transparent 65%); animation:hero-breathe 6s ease-in-out infinite; pointer-events:none; }
+.hero-thor .hero-energy { clip-path:polygon(60% 0,40% 40%,65% 38%,30% 100%,48% 53%,28% 55%); background:var(--hero-accent); opacity:.15; }
+.hero-scarlet-witch .hero-energy { background:radial-gradient(ellipse,color-mix(in srgb,var(--hero-secondary) 35%,transparent),transparent 65%); }
+.hero-avatar { width:39px; height:39px; flex-shrink:0; margin-top:2px; filter:drop-shadow(0 0 5px color-mix(in srgb,var(--hero-accent) 20%,transparent)); }
+[data-avenger] .hero-sender { color:var(--hero-accent); }
+[data-avenger]:hover { box-shadow:inset 2px 0 var(--hero-accent); }
+.hero-posting { display:flex; align-items:center; gap:6px; }
+.hero-posting > .avenger-emblem { width:24px; height:24px; }
+.reactor-ring { transform-origin:60px 60px; animation:hero-orbit 30s linear infinite; }
+.hero-spark { animation:hero-breathe 3s ease-in-out infinite; }
+@keyframes hero-orbit { to { transform:rotate(360deg); } }
+@keyframes hero-breathe { 50% { opacity:.65; } }
+@media(max-width:600px) { .avengers-banner { padding:22px 18px; gap:12px; min-height:185px; } .hero-display { flex-basis:88px; } .hero-orbit { width:230px;height:230px;margin-top:-115px;right:-90px; } .hero-signature { margin-top:14px; } }
+@media(prefers-reduced-motion:reduce) { .hero-display,.hero-orbit,.hero-energy,.reactor-ring,.hero-spark { animation:none !important; } }
+/* Pokémon adventure and Hogwarts enchantment follow each member's character. */
+:is([data-channel-theme="pokemon"], [data-channel-theme="harry-potter"]) .channel-chat {
+  --color-emerald-400: var(--hero-accent);
+  --color-emerald-500: var(--hero-accent);
+  --color-teal-500: var(--hero-secondary);
+  --color-teal-400: var(--hero-secondary);
+}
+:is([data-channel-theme="pokemon"], [data-channel-theme="harry-potter"]) .channel-messages {
+  background-image: radial-gradient(ellipse at 90% 0%,color-mix(in srgb,var(--hero-accent) 8%,transparent),transparent 60%);
+  background-size:auto;
+}
+.fantasy-emblem { width:100%; height:100%; display:block; color:var(--hero-accent); }
+.hero-posting > .fantasy-emblem { width:24px; height:24px; }
+.fantasy-banner { min-height:235px; }
+.fantasy-pokemon { background:linear-gradient(125deg,#112b32,#101c2a 60%,#243e39); border-color:color-mix(in srgb,var(--hero-accent) 32%,transparent); }
+.fantasy-harry-potter { background:radial-gradient(ellipse at 80% 0%,#44405b66,transparent 65%),linear-gradient(125deg,#221b2c,#151724); border-color:color-mix(in srgb,var(--hero-accent) 30%,transparent); }
+.fantasy-harry-potter h2 { font-family:Georgia,serif; font-weight:400; letter-spacing:-.02em; }
+.fantasy-banner::before { background:linear-gradient(100deg,#0d14244d,transparent),radial-gradient(ellipse at 85% 70%,color-mix(in srgb,var(--hero-accent) 9%,transparent),transparent 55%); }
+.fantasy-scenery { position:absolute; inset:0; z-index:-1; opacity:.2; pointer-events:none; }
+.fantasy-scenery svg { width:100%; height:100%; fill:var(--hero-secondary); }
+.fantasy-scenery svg path + path { fill:var(--hero-accent); opacity:.4; }
+.fantasy-harry-potter .fantasy-scenery { opacity:.3; }
+.fantasy-harry-potter .fantasy-scenery circle { fill:var(--hero-accent); opacity:.6; }
+.fantasy-particles { position:absolute; inset:0; pointer-events:none; overflow:hidden; }
+.fantasy-particles i { position:absolute; width:3px;height:3px; border-radius:50%; background:var(--hero-accent); box-shadow:0 0 9px var(--hero-accent); animation:fantasy-drift 7s ease-in-out infinite; opacity:.4; }
+.fantasy-harry-potter .fantasy-particles i:nth-child(odd) { width:7px;height:7px; clip-path:polygon(50% 0,60% 40%,100% 50%,60% 60%,50% 100%,40% 60%,0 50%,40% 40%); }
+.fantasy-display { animation:fantasy-float 7s ease-in-out infinite; }
+.fantasy-orbit-icon { position:absolute; width:17px;height:17px; right:0;top:6px; color:var(--hero-accent); opacity:.7; }
+.fantasy-character-charmander .fantasy-particles i { border-radius:50% 50% 20% 20%; background:#ffac70; }
+.fantasy-character-gengar .fantasy-scenery { filter:blur(3px); }
+@keyframes fantasy-drift { 50% { transform:translate(8px,-15px); opacity:.85; } }
+@keyframes fantasy-float { 50% { transform:translateY(-6px) rotate(2deg); } }
+@media(max-width:600px) { .fantasy-banner { min-height:200px; } }
+@media(prefers-reduced-motion:reduce) { .fantasy-display,.fantasy-particles i { animation:none !important; } }
+/* Full-channel scenery: isolated from scrolling messages and input controls. */
+:is([data-channel-theme="pokemon"], [data-channel-theme="harry-potter"]) .channel-chat { isolation:isolate; background:#0b1721; }
+[data-channel-theme="harry-potter"] .channel-chat { background:#141321; }
+.channel-atmosphere { position:absolute; inset:0; z-index:-1; overflow:hidden; pointer-events:none; }
+.atmosphere-pokemon { background:radial-gradient(ellipse at 90% 15%,#36656855,transparent 55%),linear-gradient(180deg,#111f30 0%,#142e35 65%,#122c2d); }
+.atmosphere-harry-potter { background:radial-gradient(ellipse at 80% 20%,#65527e44,transparent 50%),linear-gradient(180deg,#141626,#242039 65%,#101b28); }
+.atmosphere-landscape { position:absolute; inset:0; width:100%; height:100%; opacity:.6; }
+.atmosphere-moon { fill:#b6e2d0; opacity:.13; }
+.atmosphere-harry-potter .atmosphere-moon { fill:#e5daf9; opacity:.25; }
+.landscape-distant { fill:#31505a; opacity:.4; }
+.landscape-snow { fill:#b3d6d7; opacity:.2; }
+.landscape-mid { fill:#203e43; opacity:.7; }
+.landscape-near { fill:#0c252b; }
+.landscape-river { fill:#6cabad; opacity:.12; }
+.landscape-trees { fill:#102f32; opacity:.7; }
+.atmosphere-ball { stroke:var(--hero-accent); stroke-width:2; opacity:.12; }
+.atmosphere-ball circle:first-child { fill:var(--hero-secondary); fill-opacity:.15; }
+.atmosphere-ball circle:last-child { fill:#162e36; }
+.atmosphere-harry-potter .landscape-distant { fill:#4a4362; }
+.atmosphere-harry-potter .landscape-mid { fill:#1f2d3b; }
+.atmosphere-harry-potter .landscape-near { fill:#101c29; }
+.atmosphere-castle { fill:#121828; stroke:#a1a0bf; stroke-width:1; stroke-opacity:.12; }
+.castle-roofs { fill:#28243b; }
+.castle-windows { stroke:#f4cf83; stroke-width:4; stroke-opacity:.55; }
+.atmosphere-haze { position:absolute; inset:0; background:radial-gradient(ellipse at 75% 60%,color-mix(in srgb,var(--hero-accent) 8%,transparent),transparent 60%); animation:atmosphere-shimmer 14s ease-in-out infinite; }
+.atmosphere-motes { position:absolute; inset:0; }
+.atmosphere-motes i { position:absolute; width:3px; height:3px; border-radius:50%; background:var(--hero-accent); box-shadow:0 0 9px var(--hero-accent); opacity:.3; animation:atmosphere-rise 12s ease-in-out infinite; }
+.atmosphere-harry-potter .atmosphere-motes i:nth-child(3n) { width:5px; height:5px; clip-path:polygon(50% 0,63% 37%,100% 50%,63% 63%,50% 100%,37% 63%,0 50%,37% 37%); }
+:is([data-channel-theme="pokemon"], [data-channel-theme="harry-potter"]) .channel-messages { background:linear-gradient(90deg,#0d142535,#0d142510); }
+:is([data-channel-theme="pokemon"], [data-channel-theme="harry-potter"]) .channel-messages [data-avenger] { background-color:#0d1525c9; border:1px solid #b5c6e60c; box-shadow:0 2px 10px #0000000d; }
+:is([data-channel-theme="pokemon"], [data-channel-theme="harry-potter"]) .channel-messages [data-avenger]:hover { background-color:#182337ed; box-shadow:inset 2px 0 var(--hero-accent); }
+@keyframes atmosphere-rise { 50% { transform:translate(10px,-23px); opacity:.65; } }
+@keyframes atmosphere-shimmer { 50% { opacity:.45; transform:translateY(-12px); } }
+@media(max-width:600px) { .atmosphere-landscape { width:140%; left:-40%; } .atmosphere-motes i:nth-child(even) { display:none; } }
+@media(prefers-reduced-motion:reduce) { .atmosphere-motes i,.atmosphere-haze { animation:none !important; } }
+/* Sermona home: an ambient welcome and four illustrated destinations. */
+.sermona-home { position:relative; isolation:isolate; background:radial-gradient(ellipse at 12% 0%,#62518619,transparent 48%),radial-gradient(ellipse at 95% 80%,#344f6918,transparent 50%),#100f1b; }
+.sermona-home::before { content:''; position:absolute; inset:0; z-index:-1; pointer-events:none; background-image:radial-gradient(#d9c7ff32 .7px,transparent .7px); background-size:67px 73px; mask-image:linear-gradient(#0006,transparent 80%); }
+.home-content { position:relative; padding-top:12px; padding-bottom:20px; }
+.home-greeting { position:relative; isolation:isolate; overflow:hidden; min-height:220px; padding:34px 32px; border:1px solid #bb9ee525; border-radius:24px; background:linear-gradient(110deg,#211c31cf,#1917269c 58%,#28223b88); box-shadow:inset 0 1px #e9d7ff0a,0 20px 60px #00000012; }
+.home-greeting > :not(.home-orbital) { position:relative; z-index:1; }
+.home-greeting h1 { max-width:650px; font-size:clamp(30px,3.3vw,46px); letter-spacing:-.035em; line-height:1.15; }
+.home-workspace { display:flex;align-items:center;gap:8px; }
+.home-workspace > span { width:5px;height:5px;border-radius:50%;background:#c3a8e8;box-shadow:0 0 10px #c3a8e877; }
+.home-tools button { background:#151320aa; backdrop-filter:blur(8px); border-color:#b99cd13d; transition:background .2s,border-color .2s; }
+.home-tools button:hover { background:#332940aa; border-color:#d3b3f5aa; }
+.home-orbital { position:absolute; z-index:0; right:5%;top:-85px;width:340px;height:340px;border-radius:50%;background:radial-gradient(circle,#b896d619,transparent 65%);color:#d2b7ec;opacity:.48;pointer-events:none; }
+.home-orbital i { position:absolute;inset:35px;border:1px solid #bfa4df33;border-radius:50%;transform:rotate(-24deg) scaleY(.55); }
+.home-orbital i:nth-child(2) { transform:rotate(42deg) scaleY(.65);inset:20px; }
+.home-orbital i:nth-child(3) { transform:rotate(100deg) scaleY(.65);inset:50px;border-style:dashed; }
+.home-orbital i::after { content:'';position:absolute;top:20%;left:10%;width:5px;height:5px;border-radius:50%;background:#e3c9ff;box-shadow:0 0 12px #c3a8e8; }
+.home-orbital > span { position:absolute;inset:0;display:grid;place-items:center;font:italic 100px Georgia,serif;opacity:.25; }
+.home-destinations { gap:18px; }
+.home-destination { --card-accent:#c7ace9; position:relative;isolation:isolate;overflow:hidden;min-height:330px !important;padding:24px;gap:15px;background:linear-gradient(155deg,#211d2d,#151320 70%);border-color:#ab8dc32e;box-shadow:inset 0 1px #ead5ff0a,0 15px 30px #00000012; }
+.home-destination[data-destination="tasks"] { --card-accent:#9fcbd3; }
+.home-destination[data-destination="decisions"] { --card-accent:#e0c09d; }
+.home-destination[data-destination="team"] { --card-accent:#d9afc5; }
+.home-destination::before { content:'';position:absolute;inset:0;z-index:-1;background:radial-gradient(ellipse at 90% 0%,color-mix(in srgb,var(--card-accent) 10%,transparent),transparent 60%);transition:opacity .3s;opacity:.55; }
+.home-destination:hover { border-color:color-mix(in srgb,var(--card-accent) 55%,transparent);background:#1c1929;box-shadow:0 16px 35px #0003,inset 0 1px #e8d1ff18; }
+.home-destination:hover::before { opacity:1; }
+.home-destination:focus-visible { outline:2px solid var(--card-accent);outline-offset:4px; }
+.home-card-art { height:76px;display:block;width:100%;margin:-5px 0 0; }
+.home-card-art svg { width:100%;height:100%;stroke:var(--card-accent);stroke-width:1;opacity:.32;transition:opacity .3s,transform .5s; }
+.home-destination:hover .home-card-art svg { opacity:.7;transform:translateY(-3px); }
+.home-card-number { position:absolute;top:20px;right:20px;font:10px monospace;letter-spacing:.15em;color:var(--card-accent);opacity:.5; }
+.home-card-icon { position:absolute;top:60px;left:24px;width:35px;height:35px;background:#201c2de8;border-color:color-mix(in srgb,var(--card-accent) 30%,transparent);color:var(--card-accent);box-shadow:0 4px 15px #0002; }
+.home-card-icon svg { width:17px;height:17px; }
+.home-destination > span[style] { font-size:24px;letter-spacing:-.02em; }
+.home-destination > span:last-child { padding-top:17px;margin-top:auto;border-color:#cdb6e41a; }
+.home-destination > span:last-child .term { color:var(--card-accent); }
+.home-signoff { display:flex;align-items:center;justify-content:center;gap:18px;padding:14px 0;color:#a28faf80; }
+.home-signoff p { font:italic 13px Georgia,serif;letter-spacing:.04em; }
+.home-signoff > span { height:1px;width:65px;background:linear-gradient(90deg,transparent,#b69acb33); }
+.home-signoff > span:last-child { transform:rotate(180deg); }
+.home-constellation { position:absolute;right:5%;top:62%;width:240px;height:160px;opacity:.3;pointer-events:none;z-index:-1; }
+.home-constellation span { position:absolute;width:3px;height:3px;border-radius:50%;background:#c5b0dd;box-shadow:0 0 10px #b796e5;animation:home-twinkle 8s ease-in-out infinite; }
+.home-constellation span:nth-child(2) { left:50px;top:60px;animation-delay:-2s; }
+.home-constellation span:nth-child(3) { left:130px;top:30px;animation-delay:-4s; }
+.home-constellation span:nth-child(4) { left:190px;top:90px;animation-delay:-6s; }
+.home-constellation span:nth-child(5) { left:95px;top:135px;animation-delay:-3s; }
+@keyframes home-twinkle { 50% { opacity:.2;transform:scale(.7); } }
+@media(max-width:640px) { .home-greeting { padding:25px 22px;min-height:240px; } .home-orbital { right:-140px;top:-70px; } .home-destination { min-height:285px !important; } .home-card-art { height:65px; } .home-card-icon { top:48px; } .home-signoff { gap:10px; } .home-signoff > span { width:30px; } }
+@media(prefers-reduced-motion:reduce) { .home-constellation span { animation:none; } .home-destination,.home-card-art svg { transition:none; } }
+/* Intel: a connected celestial system, with stationary readable text. */
+.intel-cosmos { position:relative;isolation:isolate;background:radial-gradient(ellipse at 80% 15%,#59407125,transparent 48%),radial-gradient(ellipse at 10% 85%,#33597422,transparent 50%),#100f1d; }
+.intel-cosmos::before { content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;background-image:radial-gradient(#d7c4f066 .7px,transparent 1px),radial-gradient(#a8cbde44 .7px,transparent 1px);background-size:71px 89px,137px 151px;background-position:0 0,35px 60px;mask-image:linear-gradient(#0009,#0003); }
+.intel-system { max-width:1250px; padding-top:34px; }
+.intel-pipeline { position:relative;background:linear-gradient(130deg,#201b30aa,#17152599);border-color:#ba9cdb33;padding:25px;box-shadow:inset 0 1px #dcc5fa0c,0 25px 70px #0002; }
+.intel-pipeline > div:first-child { flex-wrap:wrap;gap:14px; }
+.intel-pipeline h2 { line-height:1.6; }
+.intel-orbit-grid { position:relative;isolation:isolate;gap:20px;padding:25px 0 8px; }
+.intel-connections { position:absolute;inset:0;width:100%;height:100%;overflow:visible;z-index:-1;pointer-events:none; }
+.intel-connections path { fill:none;stroke:#b29ac6;stroke-opacity:.2;stroke-width:1;vector-effect:non-scaling-stroke; }
+.intel-connections .intel-signal { stroke:#dac1ff;stroke-opacity:.8;stroke-width:2;stroke-dasharray:8 280;animation:intel-transmit 12s linear infinite;filter:drop-shadow(0 0 4px #c4a0f2); }
+.intel-planet-card { position:relative;min-width:0;padding:102px 16px 17px;border-color:color-mix(in srgb,var(--planet-color) 22%,transparent);background:linear-gradient(150deg,#27223bdf,#151322f5);border-radius:22px;box-shadow:inset 0 1px #e3d1ff12,0 10px 30px #0002;transition:border-color .3s,box-shadow .3s; }
+.intel-planet-card:hover { border-color:color-mix(in srgb,var(--planet-color) 60%,transparent);box-shadow:0 10px 35px #0003,inset 0 1px #e3d1ff22; }
+.intel-planet-card > div:not(.intel-planet) { position:relative;z-index:1; }
+.intel-planet-card .text-emerald-400,.intel-planet-card .text-emerald-300 { color:var(--planet-color); }
+.intel-planet { position:absolute;top:20px;left:50%;margin-left:-32px;width:64px;height:64px;animation:intel-float 8s ease-in-out infinite;animation-delay:var(--orbit-delay);pointer-events:none; }
+.intel-planet > span { position:absolute;inset:6px;border-radius:50%;background:radial-gradient(circle at 28% 24%,#ffffffa0,transparent 30%),repeating-linear-gradient(-20deg,transparent 0 9px,#ffffff12 10px 13px,transparent 14px 19px),radial-gradient(circle at 30% 30%,var(--planet-color),#171426 85%);box-shadow:inset -9px -8px 16px #0a081a88,0 0 25px color-mix(in srgb,var(--planet-color) 16%,transparent); }
+.intel-planet > i { position:absolute;inset:0 -12px;border:1px solid color-mix(in srgb,var(--planet-color) 55%,transparent);border-radius:50%;transform:rotate(-25deg) scaleY(.42);z-index:1; }
+.intel-planet > i::after { content:'';position:absolute;right:8px;top:3px;width:4px;height:4px;border-radius:50%;background:var(--planet-color);box-shadow:0 0 9px var(--planet-color); }
+.intel-planet-card:nth-of-type(2n) .intel-planet > i { transform:rotate(35deg) scaleY(.5); }
+.intel-metrics { position:relative;gap:22px;padding-top:12px; }
+.intel-metrics::before { content:'';position:absolute;left:16%;right:16%;top:50%;height:1px;background:linear-gradient(90deg,transparent,#ad9bc84d,transparent);pointer-events:none; }
+.intel-metrics > div { position:relative;isolation:isolate;overflow:hidden;min-height:205px;border-radius:24px;padding:25px;background:linear-gradient(135deg,#211e32ef,#11121ff5);border-color:#c3a4e52a;box-shadow:0 12px 40px #0002; }
+.intel-metrics > div::before { content:'';position:absolute;z-index:-1;width:180px;height:180px;right:-55px;bottom:-90px;border:1px solid #c1a8e02e;border-radius:50%;box-shadow:0 0 0 18px #b5a0d007,0 0 0 40px #b5a0d006;animation:intel-float 11s ease-in-out infinite; }
+.intel-metrics > div:nth-child(2)::before { animation-delay:-4s; }
+.intel-metrics > div:nth-child(3)::before { animation-delay:-7s; }
+@keyframes intel-float { 50% { transform:translateY(-7px) rotate(3deg); } }
+@keyframes intel-transmit { to { stroke-dashoffset:-1152; } }
+@media(max-width:767px) { .intel-system { padding:18px; } .intel-pipeline { padding:18px; } .intel-orbit-grid { padding-top:8px;gap:16px; } .intel-planet-card { padding:20px 20px 20px 106px;min-height:155px; } .intel-planet { left:20px;top:35px;margin-left:0;width:58px;height:58px; } .intel-connections { display:none; } .intel-orbit-grid::before { content:'';position:absolute;top:45px;bottom:45px;left:49px;width:1px;background:linear-gradient(#c1a6e244,#91c5d655,#c1a6e244);z-index:-1; } .intel-metrics::before { display:none; } }
+@media(prefers-reduced-motion:reduce) { .intel-planet,.intel-connections .intel-signal,.intel-metrics > div::before { animation:none !important; } }

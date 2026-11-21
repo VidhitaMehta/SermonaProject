@@ -193,6 +193,10 @@ export interface TeamInsights {
 }
 
 export interface AIAnalysisResult {
+  preparedInBackground?: boolean;
+  fromBackgroundCache?: boolean;
+  cacheGeneratedAt?: string;
+  pendingMessageCount?: number;
   /** 'ai' = Gemini produced this; 'basic' = keyword-based fallback (no API key or Gemini failed) */
   mode?: 'ai' | 'basic';
   notice?: string | null;

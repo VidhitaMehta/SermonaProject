@@ -231,6 +231,14 @@ service cloud.firestore {
         allow delete: if request.auth.uid == memberId || isProjectOwner(projectId);
       }
 
+      // Background results are server-written and revealed by the UI only on request.
+      match /backgroundAnalyses/{channelId} {
+        allow get: if isFullMember(projectId);
+      }
+      match /backgroundAnalysisStatus/{channelId} {
+        allow get: if isFullMember(projectId);
+      }
+
       // Saved AI analysis per channel (summary, proposed tasks, open questions) shared with the team
       match /analyses/{channelId} {
         allow get, list: if isProjectOwner(projectId) || canReadChannel(projectId, channelId);

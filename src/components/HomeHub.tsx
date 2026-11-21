@@ -1,29 +1,23 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  LayoutGrid,
   Crosshair,
   FileCheck2,
   Users,
   ArrowRight,
   Hash,
-  Plus,
-  Trash2,
   Settings2,
   Radar,
   RotateCcw,
-  X,
-  ShieldCheck,
 } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { Portal } from './Portal';
 import { PlatformPulse } from './PlatformPulse';
 import { ViewTab } from '../types';
 
 const serif = { fontFamily: "Baskerville, 'Palatino Linotype', Georgia, serif" };
 
 /**
- * Home screen after login. Four big cards (Overview, Mission Board, Decision Log, Squad)
- * plus the channel list and workspace tools. Every page has a Back button that returns here.
+ * Home screen after login. Four navigation cards (Channels, Mission Board, Decision Log, Squad)
+ * and workspace tools. Every page has a Back button that returns here.
  */
 export const HomeHub: React.FC = () => {
   const {
@@ -34,20 +28,11 @@ export const HomeHub: React.FC = () => {
     teamMembers,
     channels,
     setActiveTab,
-    setActiveChannelId,
-    createChannel,
-    deleteChannel,
     isProjectOwner,
-    isChannelGuest,
     getChannelAdminId,
-    unreadCounts,
     mode,
     resetToDemoData,
   } = useWorkspace();
-  const [showNewChannel, setShowNewChannel] = useState(false);
-  const [name, setName] = useState('');
-  const [topic, setTopic] = useState('');
-
   const done = tasks.filter((t) => t.completed || t.status === 'completed').length;
   const openTasks = tasks.length - done;
   const mine = tasks.filter((t) => t.assigneeId === currentUser.id && !t.completed && t.status !== 'completed').length;
@@ -58,11 +43,11 @@ export const HomeHub: React.FC = () => {
 
   const cards: { tab: ViewTab; icon: React.ElementType; title: string; text: string; stat: string }[] = [
     {
-      tab: 'dashboard',
-      icon: LayoutGrid,
-      title: 'Overview',
-      text: 'Progress, deadlines and what needs you today.',
-      stat: tasks.length ? `${Math.round((done / tasks.length) * 100)}% complete` : 'Fresh start',
+      tab: 'channel-list',
+      icon: Hash,
+      title: 'Channels',
+      text: 'Choose a channel and catch up with your team’s conversations.',
+      stat: `${channels.length} channel${channels.length === 1 ? '' : 's'}`,
     },
     {
       tab: 'tasks',
@@ -87,34 +72,22 @@ export const HomeHub: React.FC = () => {
     },
   ];
 
-  const openChannel = (id: string) => {
-    setActiveChannelId(id);
-    setActiveTab('channels');
-  };
-
-  const submitChannel = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    createChannel(name.trim(), topic.trim());
-    setName('');
-    setTopic('');
-    setShowNewChannel(false);
-  };
-
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-8 sm:py-8">
-      <div className="mx-auto max-w-6xl space-y-8">
+    <div className="sermona-home flex-1 overflow-y-auto px-4 py-6 sm:px-8 sm:py-8">
+      <div className="home-constellation" aria-hidden="true"><span/><span/><span/><span/><span/></div>
+      <div className="home-content mx-auto max-w-6xl space-y-8">
         {/* Greeting + workspace tools */}
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <header className="home-greeting flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="home-orbital" aria-hidden="true"><i/><i/><i/><span>S</span></div>
           <div>
-            <p className="term text-[10px] uppercase tracking-[0.25em] text-emerald-500">// {project.name}</p>
+            <p className="home-workspace term text-[10px] uppercase tracking-[0.25em] text-emerald-500"><span/> {project.name}</p>
             <h1 className="mt-2 text-3xl sm:text-4xl text-slate-100" style={serif}>
               Welcome back, {firstName}.
             </h1>
-            <p className="mt-1 text-sm text-slate-400">Where would you like to go?</p>
+            <p className="mt-2 text-sm text-slate-400">Your people. Your ideas. A little more possibility.</p>
             <PlatformPulse className="mt-3" />
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="home-tools flex flex-wrap gap-2">
             {canManage && (
               <button
                 onClick={() => setActiveTab('channel-settings')}
@@ -141,7 +114,7 @@ export const HomeHub: React.FC = () => {
         </header>
 
         {/* The four cards */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <section aria-label="Explore your workspace" className="home-destinations grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {cards.map((c, i) => {
             const Icon = c.icon;
             return (
@@ -149,10 +122,18 @@ export const HomeHub: React.FC = () => {
                 key={c.tab}
                 type="button"
                 onClick={() => setActiveTab(c.tab)}
-                className="group text-left flex flex-col gap-3 rounded-2xl border border-slate-750 bg-slate-900 p-5 min-h-[190px] sm:min-h-[230px] cursor-pointer transition-all duration-300 hover:-translate-y-1.5 hover:border-emerald-500/60 hover:bg-slate-850 animate-fade-up"
+                data-destination={c.tab}
+                className="home-destination group text-left flex flex-col gap-3 rounded-2xl border border-slate-750 bg-slate-900 p-5 min-h-[190px] sm:min-h-[230px] cursor-pointer transition-all duration-300 hover:-translate-y-1.5 hover:border-emerald-500/60 hover:bg-slate-850 animate-fade-up"
                 style={{ animationDelay: `${80 + i * 90}ms` }}
               >
-                <span className="w-11 h-11 rounded-xl border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-center text-emerald-400 transition-transform duration-300 group-hover:scale-110">
+                <span className="home-card-art" aria-hidden="true"><svg viewBox="0 0 240 95" fill="none">
+                  {c.tab === 'channel-list' ? <><path d="M18 30h87v30H65L51 74V60H18ZM128 15h90v30h-28l-13 13V45h-49Z"/><path d="M32 41h57M32 49h32m78-22h59"/></> :
+                  c.tab === 'tasks' ? <><circle cx="175" cy="44" r="32"/><circle cx="175" cy="44" r="21"/><circle cx="175" cy="44" r="9"/><path d="m175 44 34-29M22 30h75M22 46h55M22 62h66"/></> :
+                  c.tab === 'decisions' ? <><path d="M116 12h66l18 18v51h-84ZM182 12v20h18M131 46l9 9 17-18m-26 31h52M22 35h55m-42 14h55"/></> :
+                  <><circle cx="122" cy="44" r="17"/><circle cx="66" cy="44" r="11"/><circle cx="178" cy="44" r="11"/><path d="M96 85V74q26-27 52 0v11M48 73v-9q18-18 36 0m76 0q18-18 36 0v9M82 44h23m34 0h28"/></>}
+                </svg></span>
+                <span className="home-card-number" aria-hidden="true">0{i + 1}</span>
+                <span className="home-card-icon w-11 h-11 rounded-xl border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-center text-emerald-400 transition-transform duration-300 group-hover:scale-110">
                   <Icon className="w-5 h-5" />
                 </span>
                 <span className="text-xl text-slate-100" style={serif}>
@@ -182,117 +163,8 @@ export const HomeHub: React.FC = () => {
             );
           })}
         </section>
-
-        {/* Channels */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xl text-slate-100" style={serif}>
-              Channels
-            </h2>
-            {!isChannelGuest && (
-              <button
-                onClick={() => setShowNewChannel(true)}
-                className="flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/20 cursor-pointer"
-              >
-                <Plus size={14} /> New channel
-              </button>
-            )}
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {channels.map((chan) => {
-              const unread = unreadCounts[chan.id] ?? chan.unreadCount ?? 0;
-              const ct = tasks.filter((t) => t.channelId === chan.id);
-              const ctDone = ct.filter((t) => t.completed || t.status === 'completed').length;
-              const adminName = teamMembers.find((m) => m.id === getChannelAdminId(chan))?.name;
-              const canDelete = isProjectOwner && channels.length > 1;
-              return (
-                <div key={chan.id} className="group relative">
-                  <button
-                    type="button"
-                    onClick={() => openChannel(chan.id)}
-                    className="w-full text-left rounded-xl border border-slate-800 bg-slate-900/70 p-4 cursor-pointer transition-colors hover:border-emerald-500/50 hover:bg-slate-850"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Hash className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                      <span className="term text-sm text-slate-100 truncate">{chan.name}</span>
-                      {unread > 0 && (
-                        <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-md text-[10px] font-bold bg-amber-500 text-slate-950 flex items-center justify-center">
-                          {unread > 99 ? '99+' : unread}
-                        </span>
-                      )}
-                    </span>
-                    <span className="mt-1.5 block text-xs text-slate-400 line-clamp-2 min-h-[2rem]">
-                      {chan.topic || chan.description || 'No description yet'}
-                    </span>
-                    <span className="mt-3 flex items-center gap-3 text-[11px] text-slate-500">
-                      <span>
-                        {ctDone}/{ct.length} tasks done
-                      </span>
-                      {adminName && (
-                        <span className="flex items-center gap-1 truncate">
-                          <ShieldCheck className="w-3 h-3" /> {adminName}
-                        </span>
-                      )}
-                    </span>
-                  </button>
-                  {canDelete && (
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`Delete #${chan.name} and all its messages? This cannot be undone.`)) deleteChannel(chan.id);
-                      }}
-                      className="absolute right-2 bottom-2 p-1.5 rounded-md text-slate-600 opacity-100 sm:opacity-0 group-hover:opacity-100 hover:text-rose-400 hover:bg-rose-950 cursor-pointer transition-opacity"
-                      title={`Delete #${chan.name}`}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
+        <div className="home-signoff" aria-hidden="true"><span/><p>The art of organised thought</p><span/></div>
       </div>
-
-      {/* New channel modal */}
-      {showNewChannel && (
-        <Portal>
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-up">
-            <div className="hud relative bg-slate-900 rounded-xl max-w-sm w-full p-6 shadow-2xl">
-              <button onClick={() => setShowNewChannel(false)} className="absolute top-5 right-5 text-slate-500 hover:text-slate-100">
-                <X className="w-4 h-4" />
-              </button>
-              <div className="term text-[10px] uppercase tracking-[0.2em] text-emerald-500">// new channel</div>
-              <h3 className="text-base font-bold text-slate-100 mb-4 mt-0.5">Open a channel</h3>
-              <form onSubmit={submitChannel} className="space-y-3">
-                <input
-                  type="text"
-                  required
-                  autoFocus
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="frontend"
-                  className="term w-full px-3 py-2.5 rounded-md bg-slate-950 border border-slate-750 text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
-                />
-                <input
-                  type="text"
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                  placeholder="UI work and reviews"
-                  className="w-full px-3 py-2.5 rounded-md bg-slate-950 border border-slate-750 text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
-                />
-                <div className="flex justify-end gap-2 pt-2">
-                  <button type="button" onClick={() => setShowNewChannel(false)} className="px-3 py-2 rounded-md text-xs text-slate-500 hover:text-slate-100">
-                    Cancel
-                  </button>
-                  <button type="submit" className="px-4 py-2 rounded-md bg-emerald-600 text-white text-xs font-bold uppercase tracking-wider">
-                    Create
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </Portal>
-      )}
     </div>
   );
 };
