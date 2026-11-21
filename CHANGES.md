@@ -91,3 +91,14 @@ Without a Firebase config, the app runs in **local demo mode** as before, with s
 - Everything is tagged `simulated: true`; `--cleanup --home <id>` removes it all.
 - `.github/workflows/simulate-activity.yml` runs it in GitHub Actions in 6-hour windows, so no laptop needs to stay on. It needs the `FIREBASE_SERVICE_ACCOUNT` secret and, optionally, the `SIM_HOME_PROJECT` / `SIM_UNTIL` variables.
 - `firestore.rules` now allows public read of `stats/*` (writes stay blocked). Publish the rules in the Firebase console.
+
+---
+
+# Update: fast AI analysis (Nov 2026)
+
+- **Model + thinking:** tries `gemini-3.1-flash-lite` first (fastest), then `gemini-3.5-flash`, with **low thinking**. Override with the `GEMINI_MODEL` env var (comma-separated list).
+- **Hard time limit:** the whole AI step gives up after **25 s** (`GEMINI_TIMEOUT_MS`) and instantly returns the keyword-based results, labelled "Basic mode". There are no more multi-minute spinners, and Vercel's 60 s limit is never hit. The browser also gives up after 45 s.
+- **Smaller requests:** only the latest 150 messages are sent (`GEMINI_MAX_MESSAGES`). Older context already lives in the saved analysis, which re-runs merge into.
+- **Background auto-analysis:** while a channel is open, it re-analyzes quietly once there are 5+ new messages and the chat has been quiet for 20 s. It runs at most once every 3 minutes per channel, shared across teammates. A background "keyword only" result never overwrites an AI result.
+- **Progress panel:** shows live steps ("Reading 97 messages…"), elapsed seconds and a progress bar instead of a bare spinner.
+- `/api/status` now shows the model list and the time limit; server logs print "Gemini <model> answered in N ms".

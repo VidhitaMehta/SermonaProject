@@ -1,12 +1,23 @@
 import express from 'express';
 import dotenv from 'dotenv';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 import { basicExtract } from './basicExtract.ts';
 
 dotenv.config();
 
 const app = express();
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+// Models to try, in order (comma-separated in GEMINI_MODEL). Flash-Lite first: it is the fastest
+// and Google recommends it for extraction/classification; 3.5 Flash is the smarter backup.
+const GEMINI_MODELS = (process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite,gemini-3.5-flash')
+  .split(',')
+  .map((m) => m.trim())
+  .filter(Boolean);
+const GEMINI_MODEL = GEMINI_MODELS[0];
+// Hard time limit for the whole AI step. After this the user instantly gets the keyword results,
+// so the panel never spins for minutes (and Vercel's 60 s function limit is never hit).
+const GEMINI_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 25000);
+// Only the most recent messages are sent; older context is already in the saved analysis.
+const MAX_TRANSCRIPT_MESSAGES = Number(process.env.GEMINI_MAX_MESSAGES || 150);
 
 app.use(express.json({ limit: '10mb' }));
 
@@ -30,6 +41,8 @@ app.get('/api/status', (req, res) => {
     status: 'ok',
     hasGeminiKey: Boolean(apiKey),
     model: GEMINI_MODEL,
+    models: GEMINI_MODELS,
+    timeoutMs: GEMINI_TIMEOUT_MS,
     mode: process.env.NODE_ENV || 'development',
   });
 });
@@ -289,6 +302,7 @@ app.post('/api/analyze-conversation', async (req, res) => {
       .join('\n');
 
     const conversationTranscript = messages
+      .slice(-MAX_TRANSCRIPT_MESSAGES)
       .map((m: any) => {
         const id = m.id || 'unknown';
         const sender = m.senderName || 'Anonymous';
@@ -348,10 +362,7 @@ ${conversationTranscript}
 
 Provide structured output conforming strictly to the requested schema.`;
 
-        const response = await ai.models.generateContent({
-          model: GEMINI_MODEL,
-          contents: prompt,
-          config: {
+        const generationConfig = {
             systemInstruction,
             responseMimeType: 'application/json',
             responseSchema: {
@@ -450,8 +461,62 @@ Provide structured output conforming strictly to the requested schema.`;
               },
               required: ['summary', 'decisions', 'proposedTasks', 'unresolvedQuestions', 'teamInsights'],
             },
-          },
-        });
+          };
+
+        // Try each model in turn (low thinking first), all inside one shared time budget
+        const startedAt = Date.now();
+        let response: Awaited<ReturnType<GoogleGenAI['models']['generateContent']>> | null = null;
+        let usedModel = GEMINI_MODEL;
+        let lastError: any = null;
+        let outOfTime = false;
+        for (const model of GEMINI_MODELS) {
+          for (const withThinking of [true, false]) {
+            const remaining = GEMINI_TIMEOUT_MS - (Date.now() - startedAt);
+            if (remaining < 2000) {
+              outOfTime = true;
+              break;
+            }
+            const controller = new AbortController();
+           // Give each model at most 12 s; if it's overloaded, move on to the next one
+            const timer = setTimeout(() => controller.abort(), Math.min(remaining, 12000));
+            try {
+              response = await Promise.race([
+                ai.models.generateContent({
+                  model,
+                  contents: prompt,
+                  config: {
+                    ...generationConfig,
+                    ...(withThinking ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } } : {}),
+                    abortSignal: controller.signal,
+                  },
+                }),
+                new Promise<never>((_, reject) =>
+                  controller.signal.addEventListener('abort', () =>
+                    reject(new Error(`timed out after ${Math.round(GEMINI_TIMEOUT_MS / 1000)}s`))
+                  )
+                ),
+              ]);
+              usedModel = model;
+              break;
+            } catch (err: any) {
+              lastError = err;
+              const msg = String(err?.message || err);
+              console.warn(`Gemini ${model}${withThinking ? ' (low thinking)' : ''} failed after ${Date.now() - startedAt}ms: ${msg.slice(0, 160)}`);
+               if (/timed out|abort/i.test(msg)) {
+                // This model is too slow right now: try the next one if there's still time left
+                if (GEMINI_TIMEOUT_MS - (Date.now() - startedAt) < 4000) outOfTime = true;
+                break;
+              }
+              if (withThinking && !/thinking/i.test(msg)) break; // retry without thinking only if thinking was the problem
+            } finally {
+              clearTimeout(timer);
+            }
+          }
+          if (response || outOfTime) break;
+        }
+        if (!response) throw lastError || new Error('no Gemini model responded');
+        const tookMs = Date.now() - startedAt;
+        console.log(`Gemini ${usedModel} answered in ${tookMs}ms`);
 
         const text = response.text;
         if (text) {
@@ -463,11 +528,14 @@ Provide structured output conforming strictly to the requested schema.`;
             memberNameToId,
             channelName || 'channel'
           );
-          return res.json({ ...validated, mode: 'ai', notice: null });
+          return res.json({ ...validated, mode: 'ai', notice: null, model: usedModel, tookMs });
         }
       } catch (geminiError: any) {
-        console.warn(`Gemini (${GEMINI_MODEL}) unavailable, falling back to basic keyword extraction:`, geminiError.message);
-        fallbackReason = `Gemini request failed (${String(geminiError.message || geminiError).slice(0, 120)}). These results come from simple keyword rules instead.`;
+        const timedOut = /timed out|abort/i.test(String(geminiError?.message));
+        console.warn('Gemini unavailable, falling back to basic keyword extraction:', geminiError?.message);
+        fallbackReason = timedOut
+          ? `Gemini took longer than ${Math.round(GEMINI_TIMEOUT_MS / 1000)} seconds, so these results come from quick keyword rules instead. Try again in a minute.`
+          : `Gemini request failed (${String(geminiError?.message || geminiError).slice(0, 120)}). These results come from simple keyword rules instead.`;
       }
     }
 

@@ -140,7 +140,9 @@ interface WorkspaceContextType {
   /** New messages per channel that arrived while you were elsewhere (cloud mode) */
   unreadCounts: Record<string, number>;
   addReaction: (messageId: string, emoji: string) => void;
-  analyzeCurrentChannel: () => Promise<void>;
+  analyzeCurrentChannel: (opts?: { silent?: boolean }) => Promise<void>;
+  /** Channel id currently being analyzed silently in the background, if any */
+  autoAnalyzingChannel: string | null;
 
   // Proposed Tasks Review Actions (Approve, Edit, Reject)
   approveProposedTask: (taskId: string) => void;
@@ -433,6 +435,8 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [autoAnalyzingChannel, setAutoAnalyzingChannel] = useState<string | null>(null);
+  const analysisInFlight = useRef<Record<string, Promise<void>>>({});
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
 
@@ -1218,26 +1222,49 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   // ---------- AI analysis ----------
-  const analyzeCurrentChannel = async () => {
+  const analyzeCurrentChannel = async (opts?: { silent?: boolean }) => {
+    const silent = Boolean(opts && (opts as { silent?: boolean }).silent === true); // onClick passes an event, not opts
     const channelId = activeChannelId; // capture: user may switch channels while this runs
     const channel = channels.find((c) => c.id === channelId);
     const channelMsgs = messages[channelId] || [];
 
     if (channelMsgs.length === 0) {
-      addToast({
-        type: 'warning',
-        title: 'No messages to analyze',
-        message: 'Add some team messages to this channel first before running analysis.',
-      });
+      if (!silent)
+        addToast({
+          type: 'warning',
+          title: 'No messages to analyze',
+          message: 'Add some team messages to this channel first before running analysis.',
+        });
       return;
     }
 
-    setIsAnalyzing(true);
-    setAnalysisError(null);
+    // A background run for this channel is already going: just wait for it instead of starting another
+    const running = analysisInFlight.current[channelId];
+    if (running) {
+      if (!silent) {
+        setIsAnalyzing(true);
+        await running.catch(() => {});
+        setIsAnalyzing(false);
+      }
+      return;
+    }
+
+    if (silent) setAutoAnalyzingChannel(channelId);
+    else {
+      setIsAnalyzing(true);
+      setAnalysisError(null);
+    }
+
+    let release: () => void = () => {};
+    analysisInFlight.current[channelId] = new Promise<void>((r) => (release = r));
+    // The server gives up on Gemini after ~25 s; this is a safety net if the network itself hangs
+    const controller = new AbortController();
+    const clientTimeout = setTimeout(() => controller.abort(), 45_000);
 
     try {
       const response = await fetch('/api/analyze-conversation', {
         method: 'POST',
+        signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectId: project.id,
@@ -1288,25 +1315,58 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       };
       // Keep what the team already reviewed (edits, ticks, confirmations, owners, rejections)
       const data = mergeAnalysis(analyses[channelId] || null, fresh, tasks, decisions);
-      setAnalysisFor(channelId, { ...data, channelId });
+      // A background run that only got keyword results shouldn't replace a real AI result
+      if (silent && data.mode === 'basic' && analyses[channelId]?.mode === 'ai') return;
+      setAnalysisFor(channelId, { ...data, channelId, analyzedAt: new Date().toISOString(), messageCount: channelMsgs.length });
 
-      addToast({
-        type: data.mode === 'basic' ? 'warning' : 'success',
-        title: data.mode === 'basic' ? 'Basic analysis (no AI)' : 'Intelligence generated',
-        message: `Extracted ${data.decisions.length} decisions, ${data.proposedTasks.length} tasks, and ${data.unresolvedQuestions.length} open questions from #${channel?.name}.`,
-      });
+      if (!silent)
+        addToast({
+          type: data.mode === 'basic' ? 'warning' : 'success',
+          title: data.mode === 'basic' ? 'Basic analysis (no AI)' : 'Intelligence generated',
+          message: `Extracted ${data.decisions.length} decisions, ${data.proposedTasks.length} tasks, and ${data.unresolvedQuestions.length} open questions from #${channel?.name}.`,
+        });
     } catch (err: any) {
       console.error('Conversation analysis error:', err);
-      setAnalysisError(err.message || 'Failed to complete conversation analysis');
-      addToast({
-        type: 'error',
-        title: 'Analysis failed',
-        message: err.message || 'Unable to reach the analysis server',
-      });
+      if (!silent) {
+        const msg = err?.name === 'AbortError' ? 'The analysis server took too long to answer. Try again.' : err.message;
+        setAnalysisError(msg || 'Failed to complete conversation analysis');
+        addToast({ type: 'error', title: 'Analysis failed', message: msg || 'Unable to reach the analysis server' });
+      }
     } finally {
-      setIsAnalyzing(false);
+      clearTimeout(clientTimeout);
+      delete analysisInFlight.current[channelId];
+      release();
+      if (silent) setAutoAnalyzingChannel(null);
+      else setIsAnalyzing(false);
     }
   };
+
+  // ---------- background auto-analysis ----------
+  // While a channel is open, re-analyze it quietly once the chat goes quiet for a bit,
+  // so results are usually ready before anyone clicks Analyze. Free-tier friendly:
+  // needs 5+ new messages, waits 20 s of quiet, and at most once every 3 minutes per channel
+  // (shared across teammates, because the saved analysis carries its own timestamp).
+  const AUTO_MIN_NEW = 5;
+  const AUTO_QUIET_MS = 20_000;
+  const AUTO_COOLDOWN_MS = 3 * 60_000;
+  const autoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeMsgCount = (messages[activeChannelId] || []).length;
+  useEffect(() => {
+    if (autoTimer.current) clearTimeout(autoTimer.current);
+    if (activeTab !== 'channels' || isChannelGuest || !activeChannelId || activeMsgCount === 0) return;
+    const prev = analyses[activeChannelId];
+    const since = prev?.analyzedAt ? new Date(prev.analyzedAt).getTime() : 0;
+    const newCount = (messages[activeChannelId] || []).filter((m) => new Date(m.timestamp).getTime() > since).length;
+    if (newCount < AUTO_MIN_NEW) return;
+    const wait = Math.max(AUTO_QUIET_MS, since + AUTO_COOLDOWN_MS - Date.now());
+    autoTimer.current = setTimeout(() => {
+      if (document.visibilityState === 'visible' && !isAnalyzing) void analyzeCurrentChannel({ silent: true });
+    }, wait);
+    return () => {
+      if (autoTimer.current) clearTimeout(autoTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChannelId, activeMsgCount, activeTab, analyses[activeChannelId]?.analyzedAt]);
 
   // --- PROPOSED TASKS REVIEW WORKFLOW (Approve, Edit, Reject) ---
 
@@ -1946,6 +2006,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
         unreadCounts,
         addReaction,
         analyzeCurrentChannel,
+        autoAnalyzingChannel,
         approveProposedTask,
         rejectProposedTask,
         editProposedTask,

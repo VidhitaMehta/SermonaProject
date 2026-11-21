@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Insignia } from './Insignia';
 import { useWorkspace } from '../context/WorkspaceContext';
 import {
@@ -27,10 +27,42 @@ import {
 import { SuggestedTask, Priority, DetectedDecision, Question } from '../types';
 import { AssigneeSuggestions } from './AssigneeSuggestions';
 
+/** Live progress while the AI reads the channel: what it's doing and how long it's been. */
+const AnalysisProgress: React.FC<{ messageCount: number }> = ({ messageCount }) => {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const steps = [
+    `Reading ${Math.min(messageCount, 150)} messages…`,
+    'Spotting decisions and commitments…',
+    'Matching tasks to teammates…',
+    'Checking evidence for every item…',
+  ];
+  const step = steps[Math.min(steps.length - 1, Math.floor(seconds / 3))];
+  return (
+    <div className="p-6 rounded-2xl bg-slate-900/90 border border-emerald-500/30 text-center space-y-3">
+      <Loader2 className="w-7 h-7 text-emerald-400 animate-spin mx-auto" />
+      <h4 className="text-xs font-bold text-slate-200">{step}</h4>
+      <div className="h-1 rounded-full bg-slate-800 overflow-hidden">
+        <div
+          className="h-full bg-emerald-400 transition-all duration-1000"
+          style={{ width: `${Math.min(95, (seconds / 25) * 100)}%` }}
+        />
+      </div>
+      <p className="text-[11px] text-slate-500">
+        {seconds}s · usually done in under 15 seconds{seconds >= 20 ? ' · switching to quick mode if Gemini is slow' : ''}
+      </p>
+    </div>
+  );
+};
+
 export const AIPanel: React.FC = () => {
   const {
     currentAnalysis,
     isAnalyzing,
+    autoAnalyzingChannel,
     analyzeCurrentChannel,
     approveProposedTask,
     rejectProposedTask,
@@ -45,6 +77,8 @@ export const AIPanel: React.FC = () => {
     resolveQuestion,
     keepQuestionOpen,
     teamMembers,
+    messages,
+    activeChannelId,
   } = useWorkspace();
 
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
@@ -152,7 +186,7 @@ export const AIPanel: React.FC = () => {
               </p>
             </div>
             <button
-              onClick={analyzeCurrentChannel}
+              onClick={() => analyzeCurrentChannel()}
               className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-lg shadow-emerald-600/20 cursor-pointer transition-all"
             >
               <Sparkles className="w-3.5 h-3.5" />
@@ -161,14 +195,11 @@ export const AIPanel: React.FC = () => {
           </div>
         )}
 
-        {/* Loading Spinner */}
-        {isAnalyzing && (
-          <div className="p-8 rounded-2xl bg-slate-900/90 border border-emerald-500/30 text-center space-y-3 animate-pulse">
-            <Loader2 className="w-8 h-8 text-emerald-400 animate-spin mx-auto" />
-            <h4 className="text-xs font-bold text-slate-200">Analyzing with Gemini Intelligence...</h4>
-            <p className="text-[11px] text-slate-400">
-              Validating message ID evidence, matching workspace member identities, and filtering duplicate tasks...
-            </p>
+        {/* Progress while analyzing */}
+        {isAnalyzing && <AnalysisProgress messageCount={(messages[activeChannelId] || []).length} />}
+        {!isAnalyzing && autoAnalyzingChannel === activeChannelId && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-[11px] text-emerald-300">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Updating with the latest messages in the background…
           </div>
         )}
 
@@ -182,7 +213,7 @@ export const AIPanel: React.FC = () => {
                   <span className="font-semibold">Saved result · Basic mode — not AI.</span>{' '}
                   {currentAnalysis.notice ||
                     'Results come from simple keyword rules.'}
-                  <button type="button" onClick={analyzeCurrentChannel} disabled={isAnalyzing} className="mt-2 block font-semibold underline disabled:opacity-50">Run analysis again</button>
+                  <button type="button" onClick={() => analyzeCurrentChannel()} disabled={isAnalyzing} className="mt-2 block font-semibold underline disabled:opacity-50">Run analysis again</button>
                 </span>
               </div>
             )}

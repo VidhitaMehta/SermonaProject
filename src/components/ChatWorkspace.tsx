@@ -253,7 +253,7 @@ export const ChatWorkspace: React.FC = () => {
 
           {/* Analyze Conversation Button */}
           <button
-            onClick={analyzeCurrentChannel}
+            onClick={() => analyzeCurrentChannel()}
             disabled={isChannelGuest || isAnalyzing || currentMessages.length === 0}
             className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition-all disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
           >
