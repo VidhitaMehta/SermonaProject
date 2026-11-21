@@ -397,7 +397,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   );
   /** AI analysis results are stored per channel, so switching channels shows that channel's review. */
   const [analyses, setAnalyses] = useState<Record<string, AIAnalysisResult>>(initialStored?.analyses || {});
-  const [activeTab, setActiveTab] = useState<ViewTab>('dashboard');
+  const [activeTab, setActiveTab] = useState<ViewTab>('home');
     const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
   /** Which channel holds this message? Checks loaded messages first, then asks Firestore. */

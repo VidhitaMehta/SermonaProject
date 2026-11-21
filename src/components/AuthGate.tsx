@@ -1,5 +1,6 @@
 import React, { ReactNode } from 'react';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { PlatformPulse } from './PlatformPulse';
 import { ShieldCheck } from 'lucide-react';
 import { ConnectionLoader } from './ConnectionLoader';
 import { SermonaLogo } from './SermonaLogo';
@@ -83,6 +84,7 @@ export const AuthGate: React.FC<{ children: ReactNode }> = ({ children }) => {
             <p className="text-xs text-slate-500 mt-6 leading-relaxed">
               Joining a team? Open your invite link and sign in to access your invited channels.
             </p>
+            <PlatformPulse className="mt-5 pt-4 border-t border-slate-800" />
           </div>
         </div>
       </div>

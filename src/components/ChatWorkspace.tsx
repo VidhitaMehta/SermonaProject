@@ -209,7 +209,7 @@ export const ChatWorkspace: React.FC = () => {
   return (
     <div className="channel-chat flex-1 min-w-0 flex flex-col h-full bg-slate-900 overflow-hidden relative">
       {/* Channel Header Bar */}
-      <div className="min-h-14 py-2 px-5 flex-wrap border-b border-slate-800 flex items-center justify-between gap-4 bg-slate-950/70 backdrop-blur-sm z-10 flex-shrink-0">
+      <div className="min-h-14 py-2 px-3 sm:px-5 flex-wrap border-b border-slate-800 flex items-center justify-between gap-4 bg-slate-950/70 backdrop-blur-sm z-10 flex-shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <div className="flex items-center gap-2 text-slate-100 font-bold text-sm">
             <Hash className="w-4 h-4 text-emerald-400 flex-shrink-0" />
@@ -221,14 +221,14 @@ export const ChatWorkspace: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
           {channel && (canChangeTheme || isProjectOwner) && (
             <button
               type="button"
               className="flex items-center gap-2 rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-200 hover:border-emerald-500"
               onClick={() => setActiveTab('channel-settings')}
             >
-              <Settings2 size={14} aria-hidden="true" /> Channel settings
+              <Settings2 size={14} aria-hidden="true" /> <span className="hidden sm:inline">Channel settings</span>
             </button>
           )}
           {/* Search Box */}

@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Firebase admin key for scripts/simulate-activity.mjs (never commit)
+service-account*.json

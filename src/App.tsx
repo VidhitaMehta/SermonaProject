@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { WorkspaceModal } from './components/WorkspaceModal';
 import { SermonaLogo } from './components/SermonaLogo';
 import { getChannelTheme } from './data/channelThemes';
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
 import { WorkspaceRail } from './components/WorkspaceRail';
 import { ChannelManagement } from './components/ChannelManagement';
-import { Sidebar } from './components/Sidebar';
+import { HomeHub } from './components/HomeHub';
+import { PageBar } from './components/PageBar';
+import { Menu, X } from 'lucide-react';
 import { HomeView } from './components/HomeView';
 import { ChatWorkspace } from './components/ChatWorkspace';
 import { AIPanel } from './components/AIPanel';
@@ -36,8 +38,27 @@ const EmptyWorkspace = () => {
 };
 
 const MainLayout: React.FC = () => {
-  const { activeTab, mode, channels, activeChannelId, isChannelGuest, project } = useWorkspace();
+  const { activeTab, setActiveTab, mode, channels, activeChannelId, isChannelGuest, project } = useWorkspace();
   const shownTab = isChannelGuest ? 'channels' : activeTab;
+  const [aiSheet, setAiSheet] = useState(false);
+  const [railOpen, setRailOpen] = useState(false);
+
+  // Phone/browser Back button returns to the home cards instead of leaving the app
+  useEffect(() => {
+    if (activeTab !== 'home' && window.history.state?.sermonaTab !== activeTab) {
+      window.history.pushState({ sermonaTab: activeTab }, '');
+    }
+    setAiSheet(false);
+  }, [activeTab]);
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => setActiveTab(e.state?.sermonaTab || 'home');
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [setActiveTab]);
+  const goHome = () => {
+    if (window.history.state?.sermonaTab) window.history.back();
+    else setActiveTab('home');
+  };
   const theme = shownTab === 'channels' ? getChannelTheme(channels.find((channel) => channel.id === activeChannelId)?.theme) : null;
 
   if (mode === 'cloud' && !project.id) return <EmptyWorkspace />;
@@ -48,7 +69,15 @@ const MainLayout: React.FC = () => {
       {mode === 'local' && <FirebaseSetupBanner />}
 
       <div className="workspace-topline flex items-center justify-between border-b border-slate-800 px-6 term text-[10px] tracking-[0.16em]">
-        <div className="workspace-identity">
+        <div className="workspace-identity flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setRailOpen(true)}
+            className="md:hidden p-1.5 -ml-1 rounded-md text-slate-400 hover:text-slate-100"
+            aria-label="Open workspaces"
+          >
+            <Menu size={18} />
+          </button>
           <SermonaLogo className="workspace-brand-logo" />
           <span className="workspace-identity-caption">Collaborative intelligence</span>
         </div>
@@ -57,18 +86,46 @@ const MainLayout: React.FC = () => {
           {mode === 'local' ? 'LOCAL WORKSPACE' : 'CLOUD WORKSPACE'}
         </span>
       </div>
-      <div className="workspace-layout flex-1 flex overflow-hidden p-3 gap-3">
-        {/* 1. Workspaces (like Discord servers) */}
-        <WorkspaceRail />
-        {/* 2. Channels, navigation & people */}
-        <Sidebar />
+      <div className="workspace-layout flex-1 flex overflow-hidden p-3 gap-3 max-md:flex-nowrap! max-md:overflow-hidden! max-md:p-2!">
+        {/* 1. Workspaces (like Discord servers); a slide-in drawer on phones */}
+        <div className="hidden md:flex">
+          <WorkspaceRail />
+        </div>
+        {railOpen && (
+          <div className="md:hidden fixed inset-0 z-[70] flex bg-black/60 animate-fade-up" onClick={() => setRailOpen(false)}>
+            <div className="p-3 h-full" onClick={(e) => e.stopPropagation()}>
+              <WorkspaceRail />
+            </div>
+            <button className="m-3 self-start p-2 rounded-lg text-slate-300 bg-slate-900" aria-label="Close" onClick={() => setRailOpen(false)}>
+              <X size={18} />
+            </button>
+          </div>
+        )}
 
-        {/* 3. Main area */}
-        <main key={activeTab} data-channel-theme={theme?.id} className="workspace-main glass flex-1 flex overflow-hidden rounded-2xl animate-fade-up">
-          {shownTab === 'channels' ? (
+        {/* 2. Main area: home cards, or a page with a Back button */}
+        <main key={activeTab} data-channel-theme={theme?.id} className="workspace-main glass flex-1 min-w-0 min-h-0! flex flex-col overflow-hidden rounded-2xl animate-fade-up">
+          {shownTab !== 'home' && <PageBar onBack={goHome} onOpenAI={isChannelGuest ? undefined : () => setAiSheet(true)} />}
+          <div className="flex-1 min-h-0 flex overflow-hidden">
+          {shownTab === 'home' ? (
+            <HomeHub />
+          ) : shownTab === 'channels' ? (
             <>
               <ChatWorkspace />
-              {!isChannelGuest && <AIPanel />}
+              {!isChannelGuest && (
+                <div className="hidden lg:flex">
+                  <AIPanel />
+                </div>
+              )}
+              {aiSheet && !isChannelGuest && (
+                <div className="lg:hidden fixed inset-0 z-[60] flex flex-col justify-end bg-black/60" onClick={() => setAiSheet(false)}>
+                  <div
+                    className="h-[85vh] rounded-t-2xl overflow-hidden border-t border-slate-700 flex [&>aside]:w-full [&>aside]:border-l-0 animate-fade-up"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <AIPanel />
+                  </div>
+                </div>
+              )}
             </>
           ) : activeTab === 'channel-settings' ? (
             <ChannelManagement />
@@ -83,6 +140,7 @@ const MainLayout: React.FC = () => {
           ) : (
             <HomeView />
           )}
+          </div>
         </main>
       </div>
     </div>

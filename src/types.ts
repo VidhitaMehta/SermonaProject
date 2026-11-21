@@ -212,4 +212,4 @@ export interface AIAnalysisResult {
   dismissedTasks?: { title: string; sourceMessageIds: string[] }[];
 }
 
-export type ViewTab = 'channel-settings' | 'channels' | 'dashboard' | 'tasks' | 'decisions' | 'insights' | 'team';
+export type ViewTab = 'home' | 'channel-settings' | 'channels' | 'dashboard' | 'tasks' | 'decisions' | 'insights' | 'team';

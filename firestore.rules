@@ -137,6 +137,12 @@ service cloud.firestore {
              data.status in ['confirmed', 'proposed', 'superseded', 'deprecated'];
     }
 
+    // Platform-wide live numbers (written only by the server-side simulator / admin SDK)
+    match /stats/{statId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     match /recruitInvites/{token} {
       allow get: if isSignedIn();
       allow list, delete: if isProjectOwner(resource.data.projectId);

@@ -72,3 +72,22 @@ Without a Firebase config, the app runs in **local demo mode** as before, with s
 - **New-message pop-ups** for every channel (cloud mode). "Open" jumps to the message, @mentions are highlighted, a browser notification shows when the tab is in the background, and channels show live unread counts.
 - **@mentions**: type `@` to pick a teammate (arrow keys / Enter / Tab). Tags are highlighted and saved as `mentions` on the message.
 - **Reply to a message**: swipe right (touch or mouse drag) or use the Reply button. The quoted message shows above the reply, and clicking it jumps to the original. Replies are passed to the AI too.
+
+---
+
+# Update: card home + mobile layout + demo activity (Nov 2026)
+
+## Card home (replaces the left sidebar)
+- After login you land on **Home**: four cards (Overview, Mission Board, Decision Log, Squad) with live stats, plus the **channel list** (unread badges, task progress, admin, New channel, delete for owners) and the **Workspace management** and **Intel** buttons.
+- Every page has a **← Home** bar. In channels, that bar switches between channels. The phone or browser Back button also returns Home.
+- The old `Sidebar.tsx` is no longer used. It's kept in the repo for reference and can be deleted later.
+
+## Mobile
+- Workspaces open from the ☰ button. The chat takes the full screen, and the AI review panel opens as a bottom sheet from the **AI** button.
+
+## Demo activity simulator (`scripts/simulate-activity.mjs`)
+- `--setup` creates ~130 simulated small teams (~900 people) with channels and a few days of chat history. `--live` keeps them chatting in waves that follow Indian time of day, and publishes platform-wide live numbers to `stats/platform`. Those numbers show on the login page and Home ("N online now · people · teams · messages today"). `--home <id>` adds 6 simulated teammates to your own workspace.
+- Built for the Firebase Spark (free) plan: no presence writes for the crowd, and a daily write budget (default 15,000 of the 20,000 allowed) shared across runs.
+- Everything is tagged `simulated: true`; `--cleanup --home <id>` removes it all.
+- `.github/workflows/simulate-activity.yml` runs it in GitHub Actions in 6-hour windows, so no laptop needs to stay on. It needs the `FIREBASE_SERVICE_ACCOUNT` secret and, optionally, the `SIM_HOME_PROJECT` / `SIM_UNTIL` variables.
+- `firestore.rules` now allows public read of `stats/*` (writes stay blocked). Publish the rules in the Firebase console.
