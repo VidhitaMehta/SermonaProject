@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { SuggestedTask, Priority, DetectedDecision, Question } from '../types';
 import { AssigneeSuggestions } from './AssigneeSuggestions';
+import { messageFingerprint } from '../lib/analysisFreshness';
 
 /** Live progress while the AI reads the channel: what it's doing and how long it's been. */
 const AnalysisProgress: React.FC<{ messageCount: number }> = ({ messageCount }) => {
@@ -207,6 +208,12 @@ export const AIPanel: React.FC = () => {
         {/* Structured Results Sections */}
         {currentAnalysis && (
           <>
+            {currentAnalysis.sourceMessageFingerprint !== messageFingerprint(messages[activeChannelId] || []) && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+                Chat has changed since this result was generated.
+                <button type="button" disabled={isAnalyzing} onClick={refreshCurrentChannel} className="mt-2 block font-semibold underline disabled:opacity-50">Analyse latest messages</button>
+              </div>
+            )}
             {currentAnalysis.fromBackgroundCache && (
               <div className="space-y-2 rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3 text-[11px] text-slate-300">
                 <p className="font-semibold text-emerald-400">Saved background analysis</p>

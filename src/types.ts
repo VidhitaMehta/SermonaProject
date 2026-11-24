@@ -193,6 +193,7 @@ export interface TeamInsights {
 }
 
 export interface AIAnalysisResult {
+  sourceMessageFingerprint?: string;
   preparedInBackground?: boolean;
   fromBackgroundCache?: boolean;
   cacheGeneratedAt?: string;

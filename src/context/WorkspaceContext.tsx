@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef, ReactNode } from 'react';
+import { messageFingerprint, isReusableAnalysis } from '../lib/analysisFreshness';
 import {
   User,
   Project,
@@ -1232,11 +1233,14 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   // ---------- AI analysis ----------
+  const latestMessages = useRef(messages);
+  latestMessages.current = messages;
   const runChannelAnalysis = async (forceRefresh: boolean, opts?: { silent?: boolean }) => {
     const silent = opts?.silent === true;
     const channelId = activeChannelId; // capture: user may switch channels while this runs
     const channel = channels.find((c) => c.id === channelId);
-    const channelMsgs = messages[channelId] || [];
+    const channelMsgs = latestMessages.current[channelId] || [];
+    const fingerprint = messageFingerprint(channelMsgs);
 
     if (channelMsgs.length === 0) {
       if (!silent)
@@ -1268,7 +1272,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
 
     let release: () => void = () => {};
     analysisInFlight.current[channelId] = new Promise<void>((r) => (release = r));
-    // The server gives up on Gemini after ~25 s; this is a safety net if the network itself hangs
+    // Allow the server's 45-second AI budget plus network overhead.
     const controller = new AbortController();
     const clientTimeout = setTimeout(() => controller.abort(), 58_000);
 
@@ -1282,7 +1286,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
       }
       if (!forceRefresh && !silent) {
         const prepared = preparedResults.current[channelId] || (analyses[channelId]?.preparedInBackground ? analyses[channelId] : null);
-        if (prepared) raw = { ...prepared, fromBackgroundCache: true, cacheGeneratedAt: prepared.analyzedAt, pendingMessageCount: Math.max(0, channelMsgs.length - prepared.messageCount) };
+        if (prepared && isReusableAnalysis(prepared, fingerprint)) raw = { ...prepared, fromBackgroundCache: true, cacheGeneratedAt: prepared.analyzedAt, pendingMessageCount: 0 };
       }
       if (IS_CLOUD && db && cloudProjectId && !forceRefresh && !silent) {
         try {
@@ -1290,7 +1294,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
             getDoc(doc(db, 'projects', cloudProjectId, 'backgroundAnalyses', channelId)),
             getDoc(doc(db, 'projects', cloudProjectId, 'backgroundAnalysisStatus', channelId)),
           ]);
-          if (cached.exists() && cached.data().result?.mode === 'ai' && (!raw || new Date(cached.data().generatedAt).getTime() > new Date(raw.analyzedAt).getTime())) {
+          if (cached.exists() && isReusableAnalysis(cached.data().result, fingerprint) && (!raw || new Date(cached.data().generatedAt).getTime() > new Date(raw.analyzedAt).getTime())) {
             raw = {
               ...cached.data().result,
               fromBackgroundCache: true,
@@ -1337,7 +1341,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
           throw new Error(errData.error || `Server responded with ${response.status}`);
         }
 
-        raw = await response.json() as AIAnalysisResult;
+        raw = { ...await response.json(), sourceMessageFingerprint: fingerprint } as AIAnalysisResult;
       }
       // Give every extracted item an id that is unique across channels and re-runs.
       // Gemini / basic mode reuse ids like "dec_1" or "dec_basic_0_0", which made
