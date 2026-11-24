@@ -48,11 +48,11 @@ const AnalysisProgress: React.FC<{ messageCount: number }> = ({ messageCount }) 
       <div className="h-1 rounded-full bg-slate-800 overflow-hidden">
         <div
           className="h-full bg-emerald-400 transition-all duration-1000"
-          style={{ width: `${Math.min(95, (seconds / 25) * 100)}%` }}
+          style={{ width: `${Math.min(95, (seconds / 45) * 100)}%` }}
         />
       </div>
       <p className="text-[11px] text-slate-500">
-        {seconds}s · usually done in under 15 seconds{seconds >= 20 ? ' · switching to quick mode if Gemini is slow' : ''}
+        {seconds}s · usually done in under 20 seconds{seconds >= 35 ? ' · switching to quick mode if Gemini is slow' : ''}
       </p>
     </div>
   );

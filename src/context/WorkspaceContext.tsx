@@ -1270,7 +1270,7 @@ export const WorkspaceProvider: React.FC<{ children: ReactNode }> = ({ children 
     analysisInFlight.current[channelId] = new Promise<void>((r) => (release = r));
     // The server gives up on Gemini after ~25 s; this is a safety net if the network itself hangs
     const controller = new AbortController();
-    const clientTimeout = setTimeout(() => controller.abort(), 45_000);
+    const clientTimeout = setTimeout(() => controller.abort(), 58_000);
 
     try {
       let raw: AIAnalysisResult | null = null;

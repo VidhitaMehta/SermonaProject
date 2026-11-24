@@ -13,12 +13,12 @@ export interface AnalysisInput {
 }
 
 export function getAnalysisConfig() {
-  const models = (process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite,gemini-3.5-flash').split(',').map((model) => model.trim()).filter(Boolean);
-  const timeout = Number(process.env.GEMINI_TIMEOUT_MS || 25000);
+  const models = (process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite,gemini-flash-lite-latest').split(',').map((model) => model.trim()).filter(Boolean);
+  const timeout = Number(process.env.GEMINI_TIMEOUT_MS || 45000);
   const maximum = Number(process.env.GEMINI_MAX_MESSAGES || 150);
   return {
-    models: models.length ? models : ['gemini-3.1-flash-lite', 'gemini-3.5-flash'],
-    timeoutMs: Number.isFinite(timeout) && timeout > 0 ? Math.min(timeout, 45000) : 25000,
+    models: models.length ? models : ['gemini-3.1-flash-lite', 'gemini-flash-lite-latest'],
+    timeoutMs: Number.isFinite(timeout) && timeout > 0 ? Math.min(timeout, 50000) : 45000,
     maxMessages: Number.isFinite(maximum) && maximum > 0 ? Math.floor(maximum) : 150,
   };
 }
@@ -458,8 +458,8 @@ Provide structured output conforming strictly to the requested schema.`;
               break;
             }
             const controller = new AbortController();
-           // Give each model at most 12 s; if it's overloaded, move on to the next one
-            const timer = setTimeout(() => controller.abort(), Math.min(remaining, 12000));
+           // Reserve 30% of the total budget for fallback models.
+            const timer = setTimeout(() => controller.abort(), Math.min(remaining, Math.round(GEMINI_TIMEOUT_MS * 0.7)));
             try {
               response = await Promise.race([
                 ai.models.generateContent({
