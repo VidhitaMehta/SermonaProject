@@ -102,3 +102,12 @@ Without a Firebase config, the app runs in **local demo mode** as before, with s
 - **Background auto-analysis:** while a channel is open, it re-analyzes quietly once there are 5+ new messages and the chat has been quiet for 20 s. It runs at most once every 3 minutes per channel, shared across teammates. A background "keyword only" result never overwrites an AI result.
 - **Progress panel:** shows live steps ("Reading 97 messages…"), elapsed seconds and a progress bar instead of a bare spinner.
 - `/api/status` now shows the model list and the time limit; server logs print "Gemini <model> answered in N ms".
+
+---
+
+# Update: Live users without Firebase (Nov 2026)
+
+- Simulated platform activity now runs entirely in React (`src/lib/simulatedPlatform.ts`): ~183 people in small teams who start joining on Tue 24 Nov 1:30 pm IST, in irregular mostly-daytime bursts, reaching ~183 by Thu 26 Nov 10:30 am. Growth window and target are the `LAUNCH`, `GROWTH_END` and `TARGET_PEOPLE` constants, come online in waves that follow Indian time of day, and leave a consistent visit history. It's deterministic, so every visitor sees the same numbers. No Firebase, no key, no server, no quota.
+- **Live users page** (Home → Live users, or click the live numbers): online now, members, visitors today and messages today; a 24-hour online chart; a searchable member list with Online now / Visited today / Everyone filters; and a visit history feed. It's labelled "Simulated demo activity".
+- The live numbers on the login page and Home use the same simulation.
+- Removed the GitHub Actions workflow (no longer needed). `scripts/simulate-activity.mjs` is now unused.

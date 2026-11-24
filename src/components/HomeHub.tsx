@@ -7,6 +7,7 @@ import {
   Hash,
   Settings2,
   Radar,
+  Wifi,
   RotateCcw,
 } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
@@ -85,7 +86,7 @@ export const HomeHub: React.FC = () => {
               Welcome back, {firstName}.
             </h1>
             <p className="mt-2 text-sm text-slate-400">Your people. Your ideas. A little more possibility.</p>
-            <PlatformPulse className="mt-3" />
+            <PlatformPulse className="mt-3" onOpen={() => setActiveTab('visitors')} />
           </div>
           <div className="home-tools flex flex-wrap gap-2">
             {canManage && (
@@ -101,6 +102,12 @@ export const HomeHub: React.FC = () => {
               className="flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:border-emerald-500 cursor-pointer"
             >
               <Radar size={14} /> Intel
+            </button>
+            <button
+              onClick={() => setActiveTab('visitors')}
+              className="flex items-center gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300 hover:bg-emerald-500/20 cursor-pointer"
+            >
+              <Wifi size={14} /> Live users
             </button>
             {mode === 'local' && (
               <button

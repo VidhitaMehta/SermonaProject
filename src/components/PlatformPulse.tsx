@@ -1,13 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-
-interface PlatformStats {
-  totalUsers?: number;
-  totalTeams?: number;
-  onlineNow?: number;
-  messagesToday?: number;
-}
+import { snapshot, PlatformSnapshot } from '../lib/simulatedPlatform';
 
 /** Number that counts up smoothly when it changes. */
 const CountUp: React.FC<{ value: number }> = ({ value }) => {
@@ -29,49 +21,45 @@ const CountUp: React.FC<{ value: number }> = ({ value }) => {
   return <>{shown.toLocaleString('en-IN')}</>;
 };
 
-/**
- * Live platform-wide numbers (people, teams, online now, messages today) from `stats/platform`.
- * Hidden when the numbers aren't available (local demo mode, or the stats doc doesn't exist).
- */
-export const PlatformPulse: React.FC<{ className?: string }> = ({ className = '' }) => {
-  const [stats, setStats] = useState<PlatformStats | null>(null);
-
+/** Refreshes the simulated platform numbers every 20 seconds. */
+export const usePlatformSnapshot = (intervalMs = 20_000) => {
+  const [snap, setSnap] = useState<PlatformSnapshot>(() => snapshot());
   useEffect(() => {
-    if (!db) return;
-    return onSnapshot(
-      doc(db, 'stats', 'platform'),
-      (snap) => setStats(snap.exists() ? (snap.data() as PlatformStats) : null),
-      () => setStats(null) // e.g. rules not published yet: just hide
-    );
-  }, []);
+    const t = setInterval(() => setSnap(snapshot()), intervalMs);
+    return () => clearInterval(t);
+  }, [intervalMs]);
+  return snap;
+};
 
-  if (!stats?.totalUsers) return null;
-  const items: [string, number | undefined][] = [
-    ['people', stats.totalUsers],
-    ['teams', stats.totalTeams],
-    ['messages today', stats.messagesToday],
-  ];
+/** Live platform-wide numbers (online now, people, teams, messages today). Click to open Live users. */
+export const PlatformPulse: React.FC<{ className?: string; onOpen?: () => void }> = ({ className = '', onOpen }) => {
+  const s = usePlatformSnapshot();
+  const Wrapper = onOpen ? 'button' : 'div';
   return (
-    <div className={`flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-slate-400 ${className}`} aria-live="polite">
+    <Wrapper
+      {...(onOpen ? { type: 'button' as const, onClick: onOpen, title: 'See who is online' } : {})}
+      className={`flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-slate-400 text-left ${onOpen ? 'cursor-pointer hover:text-slate-200' : ''} ${className}`}
+      aria-live="polite"
+    >
       <span className="flex items-center gap-1.5 text-emerald-300">
         <span className="relative flex h-2 w-2">
           <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60 animate-ping" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
         </span>
         <span className="term">
-          <CountUp value={stats.onlineNow || 0} /> online now
+          <CountUp value={s.onlineNow} /> online now
         </span>
       </span>
-      {items.map(([label, value]) =>
-        value ? (
-          <span key={label} className="term">
-            <span className="text-slate-200">
-              <CountUp value={value} />
-            </span>{' '}
-            {label}
-          </span>
-        ) : null
-      )}
-    </div>
+      <span className="term">
+        <span className="text-slate-200"><CountUp value={s.totalUsers} /></span> people
+      </span>
+      <span className="term">
+        <span className="text-slate-200"><CountUp value={s.totalTeams} /></span> teams
+      </span>
+      <span className="term">
+        <span className="text-slate-200"><CountUp value={s.messagesToday} /></span> messages today
+      </span>
+      {onOpen && <span className="term text-emerald-400">View live users →</span>}
+    </Wrapper>
   );
 };

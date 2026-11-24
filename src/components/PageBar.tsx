@@ -9,6 +9,7 @@ const TITLES: Partial<Record<ViewTab, string>> = {
   decisions: 'Decision Log',
   team: 'Squad',
   insights: 'Intel',
+  visitors: 'Live users',
   'channel-settings': 'Workspace management',
   channels: 'Channels',
 };

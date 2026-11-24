@@ -6,6 +6,7 @@ import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext';
 import { WorkspaceRail } from './components/WorkspaceRail';
 import { ChannelManagement } from './components/ChannelManagement';
 import { HomeHub } from './components/HomeHub';
+import { LiveUsersView } from './components/LiveUsersView';
 import { PageBar } from './components/PageBar';
 import { Menu, X } from 'lucide-react';
 import { HomeView } from './components/HomeView';
@@ -127,6 +128,8 @@ const MainLayout: React.FC = () => {
                 </div>
               )}
             </>
+          ) : activeTab === 'visitors' ? (
+            <LiveUsersView />
           ) : activeTab === 'channel-settings' ? (
             <ChannelManagement />
           ) : activeTab === 'tasks' ? (
