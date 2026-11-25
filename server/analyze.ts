@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 import { basicExtract } from './basicExtract.ts';
+import { requestGroq, getGroqModel, groqTranscript, requireEvidence } from './groq.ts';
 
 export interface AnalysisInput {
   projectId?: string;
@@ -305,10 +306,11 @@ export async function analyzeConversation(input: AnalysisInput, apiKey = process
       : 'No prior decisions logged.';
 
     let fallbackReason =
-      'No GEMINI_API_KEY is set on the server, so these results come from simple keyword rules, not AI.';
+      'No AI provider key is set on the server, so these results come from simple keyword rules, not AI.';
 
     // Try Gemini API if available
-    if (ai) {
+    if (ai || process.env.GROQ_API_KEY) {
+      const startedAt = Date.now();
       try {
         const systemInstruction = `You are Sermona Intelligence, an authoritative engineering workspace reasoning engine.
 Your purpose is to transform team conversations into validated, structured project intelligence.
@@ -445,7 +447,19 @@ Provide structured output conforming strictly to the requested schema.`;
           };
 
         // Try each model in turn (low thinking first), all inside one shared time budget
-        const startedAt = Date.now();
+        if (process.env.GROQ_API_KEY) {
+          try {
+            const transcript = groqTranscript(messages);
+            const groqPrompt = `Channel: #${channelName || 'channel'}\nROSTER:\n${membersRosterText.slice(0, 2000)}\n${existingTasksContext.slice(0, 1200)}\n${existingDecisionsContext.slice(0, 1200)}\nCONVERSATION TRANSCRIPT (recent messages only):\n${transcript.text}`;
+            const raw = await requestGroq(systemInstruction, groqPrompt, generationConfig.responseSchema, Math.min(18000, GEMINI_TIMEOUT_MS));
+            const validated = validateAndSanitizeAnalysis(requireEvidence(raw, messages), validMessageIds, validMemberMap, memberNameToId, channelName || 'channel');
+            console.log(`Groq ${getGroqModel()} answered in ${Date.now() - startedAt}ms`);
+            return { ...validated, messageCount: transcript.count, mode: 'ai' as const, notice: null, provider: 'groq', model: getGroqModel(), tookMs: Date.now() - startedAt, analyzedMessageLimit: transcript.count };
+          } catch (error: any) {
+            console.warn(`Groq ${getGroqModel()} failed: ${error.name === 'AbortError' ? 'timeout' : error.message}`);
+            if (!ai) throw error;
+          }
+        }
         let response: Awaited<ReturnType<GoogleGenAI['models']['generateContent']>> | null = null;
         let usedModel = GEMINI_MODEL;
         let lastError: any = null;
@@ -462,7 +476,7 @@ Provide structured output conforming strictly to the requested schema.`;
             const timer = setTimeout(() => controller.abort(), Math.min(remaining, Math.round(GEMINI_TIMEOUT_MS * 0.7)));
             try {
               response = await Promise.race([
-                ai.models.generateContent({
+                ai!.models.generateContent({
                   model,
                   contents: prompt,
                   config: {
@@ -503,13 +517,13 @@ Provide structured output conforming strictly to the requested schema.`;
         if (text) {
           const parsed = JSON.parse(text.trim());
           const validated = validateAndSanitizeAnalysis(
-            parsed,
+            requireEvidence(parsed, messages),
             validMessageIds,
             validMemberMap,
             memberNameToId,
             channelName || 'channel'
           );
-          return { ...validated, mode: 'ai' as const, notice: null, model: usedModel, tookMs };
+          return { ...validated, mode: 'ai' as const, notice: null, provider: 'gemini', model: usedModel, tookMs };
         }
       } catch (geminiError: any) {
         const timedOut = /timed out|abort/i.test(String(geminiError?.message));

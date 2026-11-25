@@ -193,6 +193,9 @@ export interface TeamInsights {
 }
 
 export interface AIAnalysisResult {
+  provider?: string;
+  model?: string;
+  analyzedMessageLimit?: number;
   sourceMessageFingerprint?: string;
   preparedInBackground?: boolean;
   fromBackgroundCache?: boolean;

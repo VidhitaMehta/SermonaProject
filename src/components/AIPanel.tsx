@@ -208,6 +208,9 @@ export const AIPanel: React.FC = () => {
         {/* Structured Results Sections */}
         {currentAnalysis && (
           <>
+            {currentAnalysis.mode === 'ai' && currentAnalysis.provider && (
+              <p className="text-[11px] text-slate-400">AI: {currentAnalysis.provider} · {currentAnalysis.model}{currentAnalysis.analyzedMessageLimit ? ` · Latest ${currentAnalysis.analyzedMessageLimit} messages` : ''}</p>
+            )}
             {currentAnalysis.sourceMessageFingerprint !== messageFingerprint(messages[activeChannelId] || []) && (
               <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
                 Chat has changed since this result was generated.
@@ -228,7 +231,7 @@ export const AIPanel: React.FC = () => {
                 <span>
                   <span className="font-semibold">Saved result · Basic mode — not AI.</span>{' '}
                   {currentAnalysis.notice ||
-                    'Results come from simple keyword rules.'}
+            'Results come from simple keyword rules.'}
                   <button type="button" onClick={refreshCurrentChannel} disabled={isAnalyzing} className="mt-2 block font-semibold underline disabled:opacity-50">Run analysis again</button>
                 </span>
               </div>
